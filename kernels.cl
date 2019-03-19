@@ -182,3 +182,47 @@ kernel void collision(global t_speed* cells,
     }
   }
 }
+
+kernel void av_velocity(global t_speed* cells,
+                        global int* obstacles,
+                        int nx, int ny) {
+  int tot_cells = 0; // no. of cells used in calculation
+  float tot_u = 0.f; // accumulated magnitudes of velocity for each cell
+
+  // get column and row indices
+  int ii = get_global_id(0);
+  int jj = get_global_id(1);
+
+  // ignore occupied cells
+  if (!obstacles[ii + jj*nx]) {
+    // local density total
+    float local_density = 0.f;
+
+    for (int kk = 0; kk < NSPEEDS; kk++) {
+      local_density += cells[ii + jj*nx].speeds[kk];
+    }
+
+    // x-component of velocity
+    float u_x = (cells[ii + jj*nx].speeds[1]
+                  + cells[ii + jj*nx].speeds[5]
+                  + cells[ii + jj*nx].speeds[8]
+                  - (cells[ii + jj*nx].speeds[3]
+                     + cells[ii + jj*nx].speeds[6]
+                     + cells[ii + jj*nx].speeds[7]))
+                 / local_density;
+    // compute y velocity component
+    float u_y = (cells[ii + jj*nx].speeds[2]
+                  + cells[ii + jj*nx].speeds[5]
+                  + cells[ii + jj*nx].speeds[6]
+                  - (cells[ii + jj*nx].speeds[4]
+                     + cells[ii + jj*nx].speeds[7]
+                     + cells[ii + jj*nx].speeds[8]))
+                 / local_density;
+    // accumulate the norm of x- and y- velocity components
+    tot_u += sqrtf((u_x * u_x) + (u_y * u_y));
+    // increase counter of inspected cells
+    ++tot_cells;
+  }
+
+  return tot_u / (float)tot_cells;
+}

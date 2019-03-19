@@ -302,47 +302,31 @@ int collision(const t_param params, t_speed* cells, t_speed* tmp_cells, t_ocl oc
 }
 
 float av_velocity(const t_param params, t_speed* cells, int* obstacles, t_ocl ocl) {
-  int    tot_cells = 0; // no. of cells used in calculation
-  float tot_u;          // accumulated magnitudes of velocity for each cell
+  cl_int err;
 
-  // initialise
-  tot_u = 0.f;
+  // Set kernel arguments
+  err = clSetKernelArg(ocl.av_velocity, 0, sizeof(cl_mem), &ocl.cells);
+  checkError(err, "setting av_velocity arg 0", __LINE__);
+  err = clSetKernelArg(ocl.av_velocity, 1, sizeof(cl_mem), &ocl.tmp_cells);
+  checkError(err, "setting av_velocity arg 1", __LINE__);
+  err = clSetKernelArg(ocl.av_velocity, 2, sizeof(cl_mem), &ocl.obstacles);
+  checkError(err, "setting av_velocity arg 2", __LINE__);
+  err = clSetKernelArg(ocl.av_velocity, 3, sizeof(cl_float), &params.omega);
+  checkError(err, "setting av_velocity arg 3", __LINE__);
+  err = clSetKernelArg(ocl.av_velocity, 4, sizeof(cl_int), &params.nx);
+  checkError(err, "setting av_velocity arg 4", __LINE__);
+  err = clSetKernelArg(ocl.av_velocity, 5, sizeof(cl_int), &params.ny);
+  checkError(err, "setting av_velocity arg 5", __LINE__);
 
-  // loop over all non-blocked cells
-  for (int jj = 0; jj < params.ny; jj++) {
-    for (int ii = 0; ii < params.nx; ii++) {
-      // ignore occupied cells
-      if (!obstacles[ii + jj*params.nx]) {
-        // local density total
-        float local_density = 0.f;
+  // Enqueue kernel
+  size_t global[2] = {params.nx, params.ny};
+  err = clEnqueueNDRangeKernel(ocl.queue, ocl.av_velocity,
+                               2, NULL, global, NULL, 0, NULL, NULL);
+  checkError(err, "enqueueing av_velocity kernel", __LINE__);
 
-        for (int kk = 0; kk < NSPEEDS; kk++) {
-          local_density += cells[ii + jj*params.nx].speeds[kk];
-        }
-
-        // x-component of velocity
-        float u_x = (cells[ii + jj*params.nx].speeds[1]
-                      + cells[ii + jj*params.nx].speeds[5]
-                      + cells[ii + jj*params.nx].speeds[8]
-                      - (cells[ii + jj*params.nx].speeds[3]
-                         + cells[ii + jj*params.nx].speeds[6]
-                         + cells[ii + jj*params.nx].speeds[7]))
-                     / local_density;
-        // compute y velocity component
-        float u_y = (cells[ii + jj*params.nx].speeds[2]
-                      + cells[ii + jj*params.nx].speeds[5]
-                      + cells[ii + jj*params.nx].speeds[6]
-                      - (cells[ii + jj*params.nx].speeds[4]
-                         + cells[ii + jj*params.nx].speeds[7]
-                         + cells[ii + jj*params.nx].speeds[8]))
-                     / local_density;
-        // accumulate the norm of x- and y- velocity components
-        tot_u += sqrtf((u_x * u_x) + (u_y * u_y));
-        // increase counter of inspected cells
-        ++tot_cells;
-      }
-    }
-  }
+  // Wait for kernel to finish
+  err = clFinish(ocl.queue);
+  checkError(err, "waiting for av_velocity kernel", __LINE__);
 
   return tot_u / (float)tot_cells;
 }
