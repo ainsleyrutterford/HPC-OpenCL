@@ -39,10 +39,13 @@ typedef struct {
   cl_kernel  propagate;
   cl_kernel  rebound;
   cl_kernel  collision;
+  cl_kernel  av_velocity;
 
   cl_mem cells;
   cl_mem tmp_cells;
   cl_mem obstacles;
+
+  cl_mem velocities;
 } t_ocl;
 
 // struct to hold the 'speed' values
@@ -111,6 +114,14 @@ int main(int argc, char* argv[]) {
 
   // initialise our data structures and load values from file
   initialise(paramfile, obstaclefile, &params, &cells, &tmp_cells, &obstacles, &av_vels, &ocl);
+
+  size_t local_size = params.nx;
+  int work_groups = (params.nx * params.ny) / local_size;
+  float* partial_velocities = calloc(work_groups, sizeof(float));
+  if (!partial_velocities) {
+    printf("Error: could not allocate host memory for partial_velocities\n");
+    return EXIT_FAILURE;
+  }
 
   // iterate for maxIters timesteps
   gettimeofday(&timstr, NULL);
@@ -321,14 +332,25 @@ float av_velocity(const t_param params, t_speed* cells, int* obstacles, t_ocl oc
   // Enqueue kernel
   size_t global[2] = {params.nx, params.ny};
   err = clEnqueueNDRangeKernel(ocl.queue, ocl.av_velocity,
-                               2, NULL, global, NULL, 0, NULL, NULL);
+                               2, NULL, global, local, 0, NULL, NULL);
   checkError(err, "enqueueing av_velocity kernel", __LINE__);
+
+  // Read velocities from device
+  err = clEnqueueReadBuffer(ocl.queue, ocl.velocities, CL_TRUE, 0,
+                            sizeof(float) * work_groups,
+                            partial_velocities, 0, NULL, NULL);
+  checkError(err, "reading velocities data", __LINE__);
 
   // Wait for kernel to finish
   err = clFinish(ocl.queue);
   checkError(err, "waiting for av_velocity kernel", __LINE__);
 
-  return tot_u / (float)tot_cells;
+  float final = 0.f;
+  for (int i = 0; i < work_groups; i++) {
+    final += partial_velocities[i];
+  }
+
+  return final;
 }
 
 int initialise(const char* paramfile, const char* obstaclefile,
@@ -540,6 +562,10 @@ int initialise(const char* paramfile, const char* obstaclefile,
                                   sizeof(cl_int) * params->nx * params->ny, NULL, &err);
   checkError(err, "creating obstacles buffer", __LINE__);
 
+  ocl->velocities = clCreateBuffer(ocl->context, CL_MEM_WRITE_ONLY,
+                                   sizeof(float) * work_groups, NULL, &err);
+  checkError(err, "creating velocities buffer", __LINE__);
+
   return EXIT_SUCCESS;
 }
 
@@ -571,7 +597,6 @@ int finalise(const t_param* params, t_speed** cells_ptr, t_speed** tmp_cells_ptr
 
   return EXIT_SUCCESS;
 }
-
 
 float calc_reynolds(const t_param params, t_speed* cells, int* obstacles, t_ocl ocl) {
   const float viscosity = 1.f / 6.f * (2.f / params.omega - 1.f);

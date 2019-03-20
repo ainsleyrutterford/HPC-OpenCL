@@ -183,11 +183,35 @@ kernel void collision(global t_speed* cells,
   }
 }
 
+void reduce(__local  float* local_velocities,
+            __global float* global_velocities) {
+  int num_work_items = get_local_size(0);
+  int local_id       = get_local_id(0);
+  int group_id       = get_group_id(0);
+
+  float av_velocity;
+  int i;
+
+  if (local_id == 0) {
+    av_velocity = 0.0f;
+
+    for (i = 0; i < num_work_items; i++) {
+      av_velocity += local_velocities[i];
+    }
+
+    global_velocities[group_id] = av_velocity / num_work_items;
+  }
+}
+
 kernel void av_velocity(global t_speed* cells,
                         global int* obstacles,
-                        int nx, int ny) {
+                        int nx, int ny,
+                        __local  float* local_velocities,
+                        __global float* global_velocities) {
   int tot_cells = 0; // no. of cells used in calculation
   float tot_u = 0.f; // accumulated magnitudes of velocity for each cell
+
+  int local_id = get_local_id(0);
 
   // get column and row indices
   int ii = get_global_id(0);
@@ -224,5 +248,8 @@ kernel void av_velocity(global t_speed* cells,
     ++tot_cells;
   }
 
-  return tot_u / (float)tot_cells;
+  local_velocities[local_id] = tot_u / (float) tot_cells;
+  barrier(CLK_LOCAL_MEM_FENCE);
+
+  reduce(local_velocities, global_velocities);
 }
