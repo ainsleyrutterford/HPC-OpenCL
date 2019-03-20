@@ -183,9 +183,9 @@ kernel void collision(global t_speed* cells,
   }
 }
 
-void reduce(__local  float* local_velocities,
-            __local  float* local_tot_cells,
-            __global float* global_velocities) {
+void reduce(local  float* local_velocities,
+            local  float* local_tot_cells,
+            global float* global_velocities) {
   int num_work_items = get_local_size(0);
   int local_id       = get_local_id(0);
   int group_id       = get_group_id(0);
@@ -209,9 +209,9 @@ void reduce(__local  float* local_velocities,
 kernel void av_velocity(global t_speed* cells,
                         global int* obstacles,
                         int nx, int ny,
-                        __local  float* local_velocities,
-                        __local  float* local_tot_cells,
-                        __global float* global_velocities) {
+                        local  float* local_velocities,
+                        local  float* local_tot_cells,
+                        global float* global_velocities) {
   int tot_cells = 0; // no. of cells used in calculation
   float tot_u = 0.f; // accumulated magnitudes of velocity for each cell
 
