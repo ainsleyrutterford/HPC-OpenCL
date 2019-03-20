@@ -247,7 +247,7 @@ kernel void av_velocity(global t_speed* cells,
                      + cells[ii + jj*nx].speeds[8]))
                  / local_density;
     // accumulate the norm of x- and y- velocity components
-    tot_u = sqrtf((u_x * u_x) + (u_y * u_y));
+    tot_u = sqrt((u_x * u_x) + (u_y * u_y));
     // increase counter of inspected cells
     tot_cells = 1;
   }
