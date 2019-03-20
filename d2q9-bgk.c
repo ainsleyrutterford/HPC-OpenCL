@@ -30,9 +30,9 @@ typedef struct {
 
 // struct to hold OpenCL objects
 typedef struct {
-  cl_device_id      device;
-  cl_context        context;
-  cl_command_queue  queue;
+  cl_device_id     device;
+  cl_context       context;
+  cl_command_queue queue;
 
   cl_program program;
   cl_kernel  accelerate_flow;
@@ -46,6 +46,9 @@ typedef struct {
   cl_mem obstacles;
 
   cl_mem velocities;
+
+  size_t local_size;
+  int    work_groups;
 } t_ocl;
 
 // struct to hold the 'speed' values
@@ -76,10 +79,10 @@ int finalise(const t_param* params, t_speed** cells_ptr, t_speed** tmp_cells_ptr
 float total_density(const t_param params, t_speed* cells);
 
 // compute average velocity
-float av_velocity(const t_param params, t_speed* cells, int* obstacles, t_ocl ocl);
+float av_velocity(const t_param params, t_speed* cells, int* obstacles, t_ocl ocl, float* partial_velocities);
 
 // calculate Reynolds number
-float calc_reynolds(const t_param params, t_speed* cells, int* obstacles, t_ocl ocl);
+float calc_reynolds(const t_param params, t_speed* cells, int* obstacles, t_ocl ocl, float* partial_velocities);
 
 // utility functions
 void checkError(cl_int err, const char *op, const int line);
@@ -115,9 +118,7 @@ int main(int argc, char* argv[]) {
   // initialise our data structures and load values from file
   initialise(paramfile, obstaclefile, &params, &cells, &tmp_cells, &obstacles, &av_vels, &ocl);
 
-  size_t local_size = params.nx;
-  int work_groups = (params.nx * params.ny) / local_size;
-  float* partial_velocities = calloc(work_groups, sizeof(float));
+  float* partial_velocities = calloc(ocl.work_groups, sizeof(float));
   if (!partial_velocities) {
     printf("Error: could not allocate host memory for partial_velocities\n");
     return EXIT_FAILURE;
@@ -141,7 +142,7 @@ int main(int argc, char* argv[]) {
 
   for (int tt = 0; tt < params.maxIters; tt++) {
     timestep(params, cells, tmp_cells, obstacles, ocl);
-    av_vels[tt] = av_velocity(params, cells, obstacles, ocl);
+    av_vels[tt] = av_velocity(params, cells, obstacles, ocl, partial_velocities);
     #ifdef DEBUG
       printf("==timestep: %d==\n", tt);
       printf("av velocity: %.12E\n", av_vels[tt]);
@@ -159,7 +160,7 @@ int main(int argc, char* argv[]) {
 
   // write final values and free memory
   printf("==done==\n");
-  printf("Reynolds number:\t\t%.12E\n", calc_reynolds(params, cells, obstacles, ocl));
+  printf("Reynolds number:\t\t%.12E\n", calc_reynolds(params, cells, obstacles, ocl, partial_velocities));
   printf("Elapsed time:\t\t\t%.6lf (s)\n", toc - tic);
   printf("Elapsed user CPU time:\t\t%.6lf (s)\n", usrtim);
   printf("Elapsed system CPU time:\t%.6lf (s)\n", systim);
@@ -312,32 +313,37 @@ int collision(const t_param params, t_speed* cells, t_speed* tmp_cells, t_ocl oc
   return EXIT_SUCCESS;
 }
 
-float av_velocity(const t_param params, t_speed* cells, int* obstacles, t_ocl ocl) {
+float av_velocity(const t_param params, t_speed* cells, int* obstacles, t_ocl ocl, float* partial_velocities) {
   cl_int err;
 
   // Set kernel arguments
   err = clSetKernelArg(ocl.av_velocity, 0, sizeof(cl_mem), &ocl.cells);
   checkError(err, "setting av_velocity arg 0", __LINE__);
-  err = clSetKernelArg(ocl.av_velocity, 1, sizeof(cl_mem), &ocl.tmp_cells);
+  err = clSetKernelArg(ocl.av_velocity, 1, sizeof(cl_mem), &ocl.obstacles);
   checkError(err, "setting av_velocity arg 1", __LINE__);
-  err = clSetKernelArg(ocl.av_velocity, 2, sizeof(cl_mem), &ocl.obstacles);
+  err = clSetKernelArg(ocl.av_velocity, 2, sizeof(cl_float), &params.omega);
   checkError(err, "setting av_velocity arg 2", __LINE__);
-  err = clSetKernelArg(ocl.av_velocity, 3, sizeof(cl_float), &params.omega);
+  err = clSetKernelArg(ocl.av_velocity, 3, sizeof(cl_int), &params.nx);
   checkError(err, "setting av_velocity arg 3", __LINE__);
-  err = clSetKernelArg(ocl.av_velocity, 4, sizeof(cl_int), &params.nx);
+  err = clSetKernelArg(ocl.av_velocity, 4, sizeof(cl_int), &params.ny);
   checkError(err, "setting av_velocity arg 4", __LINE__);
-  err = clSetKernelArg(ocl.av_velocity, 5, sizeof(cl_int), &params.ny);
+  err = clSetKernelArg(ocl.av_velocity, 5, sizeof(float) * ocl.local_size, NULL);
   checkError(err, "setting av_velocity arg 5", __LINE__);
+  err = clSetKernelArg(ocl.av_velocity, 6, sizeof(float) * ocl.local_size, NULL);
+  checkError(err, "setting av_velocity arg 6", __LINE__);
+  err = clSetKernelArg(ocl.av_velocity, 7, sizeof(cl_mem), &ocl.velocities);
+  checkError(err, "setting av_velocity arg 7", __LINE__);
 
   // Enqueue kernel
   size_t global[2] = {params.nx, params.ny};
+  size_t local[1] = {ocl.local_size};
   err = clEnqueueNDRangeKernel(ocl.queue, ocl.av_velocity,
                                2, NULL, global, local, 0, NULL, NULL);
   checkError(err, "enqueueing av_velocity kernel", __LINE__);
 
   // Read velocities from device
   err = clEnqueueReadBuffer(ocl.queue, ocl.velocities, CL_TRUE, 0,
-                            sizeof(float) * work_groups,
+                            sizeof(float) * ocl.work_groups,
                             partial_velocities, 0, NULL, NULL);
   checkError(err, "reading velocities data", __LINE__);
 
@@ -345,12 +351,12 @@ float av_velocity(const t_param params, t_speed* cells, int* obstacles, t_ocl oc
   err = clFinish(ocl.queue);
   checkError(err, "waiting for av_velocity kernel", __LINE__);
 
-  float final = 0.f;
-  for (int i = 0; i < work_groups; i++) {
-    final += partial_velocities[i];
+  float final_average_velocity = 0.f;
+  for (int i = 0; i < ocl.work_groups; i++) {
+    final_average_velocity += partial_velocities[i];
   }
 
-  return final;
+  return final_average_velocity;
 }
 
 int initialise(const char* paramfile, const char* obstaclefile,
@@ -562,8 +568,11 @@ int initialise(const char* paramfile, const char* obstaclefile,
                                   sizeof(cl_int) * params->nx * params->ny, NULL, &err);
   checkError(err, "creating obstacles buffer", __LINE__);
 
+  ocl->local_size = params->nx;
+  ocl->work_groups = (params->nx * params->ny) / ocl->local_size;
+
   ocl->velocities = clCreateBuffer(ocl->context, CL_MEM_WRITE_ONLY,
-                                   sizeof(float) * work_groups, NULL, &err);
+                                   sizeof(float) * ocl->work_groups, NULL, &err);
   checkError(err, "creating velocities buffer", __LINE__);
 
   return EXIT_SUCCESS;
@@ -598,10 +607,10 @@ int finalise(const t_param* params, t_speed** cells_ptr, t_speed** tmp_cells_ptr
   return EXIT_SUCCESS;
 }
 
-float calc_reynolds(const t_param params, t_speed* cells, int* obstacles, t_ocl ocl) {
+float calc_reynolds(const t_param params, t_speed* cells, int* obstacles, t_ocl ocl, float* partial_velocities) {
   const float viscosity = 1.f / 6.f * (2.f / params.omega - 1.f);
 
-  return av_velocity(params, cells, obstacles, ocl) * params.reynolds_dim / viscosity;
+  return av_velocity(params, cells, obstacles, ocl, partial_velocities) * params.reynolds_dim / viscosity;
 }
 
 float total_density(const t_param params, t_speed* cells) {

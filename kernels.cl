@@ -184,6 +184,7 @@ kernel void collision(global t_speed* cells,
 }
 
 void reduce(__local  float* local_velocities,
+            __local  float* local_tot_cells,
             __global float* global_velocities) {
   int num_work_items = get_local_size(0);
   int local_id       = get_local_id(0);
@@ -193,13 +194,15 @@ void reduce(__local  float* local_velocities,
   int i;
 
   if (local_id == 0) {
-    av_velocity = 0.0f;
+    float total_velocity = 0.f;
+    float total_cells = 0.f;
 
     for (i = 0; i < num_work_items; i++) {
-      av_velocity += local_velocities[i];
+      total_velocity += local_velocities[i];
+      total_cells += local_tot_cells[i];
     }
 
-    global_velocities[group_id] = av_velocity / num_work_items;
+    global_velocities[group_id] = total_velocity / total_cells;
   }
 }
 
@@ -207,6 +210,7 @@ kernel void av_velocity(global t_speed* cells,
                         global int* obstacles,
                         int nx, int ny,
                         __local  float* local_velocities,
+                        __local  float* local_tot_cells,
                         __global float* global_velocities) {
   int tot_cells = 0; // no. of cells used in calculation
   float tot_u = 0.f; // accumulated magnitudes of velocity for each cell
@@ -243,13 +247,14 @@ kernel void av_velocity(global t_speed* cells,
                      + cells[ii + jj*nx].speeds[8]))
                  / local_density;
     // accumulate the norm of x- and y- velocity components
-    tot_u += sqrtf((u_x * u_x) + (u_y * u_y));
+    tot_u = sqrtf((u_x * u_x) + (u_y * u_y));
     // increase counter of inspected cells
-    ++tot_cells;
+    tot_cells = 1;
   }
 
-  local_velocities[local_id] = tot_u / (float) tot_cells;
+  local_velocities[local_id] = tot_u;
+  local_tot_cells[local_id] = tot_cells;
   barrier(CLK_LOCAL_MEM_FENCE);
 
-  reduce(local_velocities, global_velocities);
+  reduce(local_velocities, local_tot_cells, global_velocities);
 }
