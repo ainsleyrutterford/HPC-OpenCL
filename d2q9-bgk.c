@@ -334,8 +334,9 @@ float av_velocity(const t_param params, t_speed* cells, int* obstacles, t_ocl oc
 
   // Enqueue kernel
   size_t global[2] = {params.nx, params.ny};
+  size_t local[2] = {ocl.local_size, ocl.local_size};
   err = clEnqueueNDRangeKernel(ocl.queue, ocl.av_velocity,
-                               2, NULL, global, NULL, 0, NULL, NULL);
+                               2, NULL, global, local, 0, NULL, NULL);
   checkError(err, "enqueueing av_velocity kernel", __LINE__);
 
   // Read velocities from device
@@ -353,7 +354,7 @@ float av_velocity(const t_param params, t_speed* cells, int* obstacles, t_ocl oc
     final_average_velocity += partial_velocities[i];
   }
 
-  return final_average_velocity;
+  return final_average_velocity / ocl.work_groups;
 }
 
 int initialise(const char* paramfile, const char* obstaclefile,
@@ -567,7 +568,7 @@ int initialise(const char* paramfile, const char* obstaclefile,
                                   sizeof(cl_int) * params->nx * params->ny, NULL, &err);
   checkError(err, "creating obstacles buffer", __LINE__);
 
-  ocl->local_size = params->nx;
+  ocl->local_size = 16;
   ocl->work_groups = (params->nx * params->ny) / ocl->local_size;
 
   ocl->velocities = clCreateBuffer(ocl->context, CL_MEM_WRITE_ONLY,
