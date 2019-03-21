@@ -157,6 +157,17 @@ int main(int argc, char* argv[]) {
     #endif
   }
 
+  // Read tmp_cells from device
+  err = clEnqueueReadBuffer(ocl.queue, ocl.tmp_cells, CL_TRUE, 0,
+                            sizeof(t_speed) * params.nx * params.ny,
+                            tmp_cells, 0, NULL, NULL);
+  checkError(err, "reading tmp_cells data", __LINE__);
+  // Read cells from device
+  err = clEnqueueReadBuffer(ocl.queue, ocl.cells, CL_TRUE, 0,
+                            sizeof(t_speed) * params.nx * params.ny,
+                            cells, 0, NULL, NULL);
+  checkError(err, "reading cells data", __LINE__);
+
   gettimeofday(&timstr, NULL);
   toc = timstr.tv_sec + (timstr.tv_usec / 1000000.0);
   getrusage(RUSAGE_SELF, &ru);
@@ -178,31 +189,11 @@ int main(int argc, char* argv[]) {
 }
 
 float timestep(const t_param params, t_speed* cells, t_speed* tmp_cells, int* obstacles, t_ocl ocl, float* partial_velocities, int* partial_tot_cells) {
-  cl_int err;
-
-  // Write cells to device
-  err = clEnqueueWriteBuffer(ocl.queue, ocl.cells, CL_TRUE, 0,
-                             sizeof(t_speed) * params.nx * params.ny,
-                             cells, 0, NULL, NULL);
-  checkError(err, "writing cells data", __LINE__);
-
   accelerate_flow(params, cells, ocl);
   propagate(params, cells, tmp_cells, ocl);
   rebound(params, cells, tmp_cells, ocl);
   collision(params, cells, tmp_cells, ocl);
-  float av_vel = av_velocity(params, cells, ocl, partial_velocities, partial_tot_cells);
-
-  // Read tmp_cells from device
-  err = clEnqueueReadBuffer(ocl.queue, ocl.tmp_cells, CL_TRUE, 0,
-                            sizeof(t_speed) * params.nx * params.ny,
-                            tmp_cells, 0, NULL, NULL);
-  checkError(err, "reading tmp_cells data", __LINE__);
-  // Read cells from device
-  err = clEnqueueReadBuffer(ocl.queue, ocl.cells, CL_TRUE, 0,
-                            sizeof(t_speed) * params.nx * params.ny,
-                            cells, 0, NULL, NULL);
-  checkError(err, "reading cells data", __LINE__);
-  return av_vel;
+  return av_velocity(params, cells, ocl, partial_velocities, partial_tot_cells);
 }
 
 int accelerate_flow(const t_param params, t_speed* cells, t_ocl ocl) {
