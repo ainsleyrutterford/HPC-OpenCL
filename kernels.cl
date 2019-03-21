@@ -183,39 +183,6 @@ kernel void collision(global t_speed* cells,
   }
 }
 
-void reduce(local  float* local_velocities,
-            local  int* local_tot_cells,
-            global float* global_velocities,
-            global int* global_tot_cells) {
-  int local_size_x  = get_local_size(0);
-  int local_size_y  = get_local_size(1);
-
-  int local_id_x    = get_local_id(0);
-  int local_id_y    = get_local_id(1);
-
-  int group_id_x    = get_group_id(0);
-  int group_id_y    = get_group_id(1);
-
-  int work_groups_x = get_global_size(0) / get_local_size(0);
-
-  int y, x;
-
-  if (local_id_x == 0 && local_id_y == 0) {
-    float total_velocity = 0.f;
-    int total_cells = 0;
-
-    for (y = 0; y < local_size_y; y++) {
-      for (x = 0; x < local_size_x; x++) {
-        total_velocity += local_velocities[x + y * local_size_x];
-        total_cells += local_tot_cells[x + y * local_size_x];
-      }
-    }
-
-    global_velocities[group_id_x + group_id_y * work_groups_x] = total_velocity;
-    global_tot_cells[group_id_x + group_id_y * work_groups_x] = total_cells;
-  }
-}
-
 kernel void av_velocity(global t_speed* cells,
                         global int* obstacles,
                         int nx, int ny,
@@ -269,7 +236,28 @@ kernel void av_velocity(global t_speed* cells,
 
   local_velocities[local_id_x + local_id_y * local_size_x] = tot_u;
   local_tot_cells[local_id_x + local_id_y * local_size_x] = tot_cells;
-  barrier(CLK_LOCAL_MEM_FENCE);
 
-  reduce(local_velocities, local_tot_cells, global_velocities, global_tot_cells);
+  int group_id_x    = get_group_id(0);
+  int group_id_y    = get_group_id(1);
+
+  int work_groups_x = get_global_size(0) / local_size_x;
+
+  uint group_size = local_size_x * local_size_y;
+
+  for (uint stride = group_size / 2; stride > 0; stride /= 2) {
+
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    if ((local_id_x + local_id_y * local_size_x) < stride) {
+      local_velocities[local_id_x + local_id_y * local_size_x] +=
+      local_velocities[(local_id_x + local_id_y * local_size_x) + stride];
+      local_tot_cells[local_id_x + local_id_y * local_size_x] +=
+      local_tot_cells[(local_id_x + local_id_y * local_size_x) + stride];
+    }
+  }
+
+  if (local_id_x == 0 && local_id_y == 0) {
+    global_velocities[group_id_x + group_id_y * work_groups_x] = local_velocities[0];
+    global_tot_cells[group_id_x + group_id_y * work_groups_x] = local_tot_cells[0];
+  }
 }
