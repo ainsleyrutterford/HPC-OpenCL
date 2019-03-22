@@ -59,11 +59,11 @@ int initialise(const char* paramfile, const char* obstaclefile,
                t_param* params, float** cells_ptr, float** tmp_cells_ptr,
                int** obstacles_ptr, float** av_vels_ptr, t_ocl* ocl);
 
-float timestep(const t_param params, float* cells, float* tmp_cells, int* obstacles, t_ocl ocl, float* partial_velocities, int* partial_tot_cells);
-int accelerate_flow(const t_param params, float* cells, t_ocl ocl);
-int propagate(const t_param params, float* cells, float* tmp_cells, t_ocl ocl);
-int rebound(const t_param params, float* cells, float* tmp_cells, t_ocl ocl);
-int collision(const t_param params, float* cells, float* tmp_cells, t_ocl ocl);
+float timestep(const t_param params, t_ocl ocl, float* partial_velocities, int* partial_tot_cells);
+int accelerate_flow(const t_param params, t_ocl ocl);
+int propagate(const t_param params, t_ocl ocl);
+int rebound(const t_param params, t_ocl ocl);
+int collision(const t_param params, t_ocl ocl);
 int write_values(const t_param params, float* cells, int* obstacles, float* av_vels);
 
 // finalise, including freeing up allocated memory
@@ -75,7 +75,7 @@ int finalise(const t_param* params, float** cells_ptr, float** tmp_cells_ptr,
 float total_density(const t_param params, float* cells);
 
 // compute average velocity
-float av_velocity(const t_param params, float* cells, t_ocl ocl, float* partial_velocities, int* partial_tot_cells);
+float av_velocity(const t_param params, t_ocl ocl, float* partial_velocities, int* partial_tot_cells);
 float av_velocity_original(const t_param params, float* cells, int* obstacles, t_ocl ocl);
 
 // calculate Reynolds number
@@ -144,7 +144,7 @@ int main(int argc, char* argv[]) {
   checkError(err, "writing obstacles data", __LINE__);
 
   for (int tt = 0; tt < params.maxIters; tt++) {
-    av_vels[tt] = timestep(params, cells, tmp_cells, obstacles, ocl, partial_velocities, partial_tot_cells);
+    av_vels[tt] = timestep(params, ocl, partial_velocities, partial_tot_cells);
     #ifdef DEBUG
       printf("==timestep: %d==\n", tt);
       printf("av velocity: %.12E\n", av_vels[tt]);
@@ -183,15 +183,15 @@ int main(int argc, char* argv[]) {
   return EXIT_SUCCESS;
 }
 
-float timestep(const t_param params, float* cells, float* tmp_cells, int* obstacles, t_ocl ocl, float* partial_velocities, int* partial_tot_cells) {
-  accelerate_flow(params, cells, ocl);
-  propagate(params, cells, tmp_cells, ocl);
-  rebound(params, cells, tmp_cells, ocl);
-  collision(params, cells, tmp_cells, ocl);
-  return av_velocity(params, cells, ocl, partial_velocities, partial_tot_cells);
+float timestep(const t_param params, t_ocl ocl, float* partial_velocities, int* partial_tot_cells) {
+  accelerate_flow(params, ocl);
+  propagate(params, ocl);
+  rebound(params, ocl);
+  collision(params, ocl);
+  return av_velocity(params, ocl, partial_velocities, partial_tot_cells);
 }
 
-int accelerate_flow(const t_param params, float* cells, t_ocl ocl) {
+int accelerate_flow(const t_param params, t_ocl ocl) {
   cl_int err;
 
   // Set kernel arguments
@@ -221,7 +221,7 @@ int accelerate_flow(const t_param params, float* cells, t_ocl ocl) {
   return EXIT_SUCCESS;
 }
 
-int propagate(const t_param params, float* cells, float* tmp_cells, t_ocl ocl) {
+int propagate(const t_param params, t_ocl ocl) {
   cl_int err;
 
   // Set kernel arguments
@@ -249,7 +249,7 @@ int propagate(const t_param params, float* cells, float* tmp_cells, t_ocl ocl) {
   return EXIT_SUCCESS;
 }
 
-int rebound(const t_param params, float* cells, float* tmp_cells, t_ocl ocl) {
+int rebound(const t_param params, t_ocl ocl) {
   cl_int err;
 
   // Set kernel arguments
@@ -277,7 +277,7 @@ int rebound(const t_param params, float* cells, float* tmp_cells, t_ocl ocl) {
   return EXIT_SUCCESS;
 }
 
-int collision(const t_param params, float* cells, float* tmp_cells, t_ocl ocl) {
+int collision(const t_param params, t_ocl ocl) {
   cl_int err;
 
   // Set kernel arguments
@@ -307,7 +307,7 @@ int collision(const t_param params, float* cells, float* tmp_cells, t_ocl ocl) {
   return EXIT_SUCCESS;
 }
 
-float av_velocity(const t_param params, float* cells, t_ocl ocl, float* partial_velocities, int* partial_tot_cells) {
+float av_velocity(const t_param params, t_ocl ocl, float* partial_velocities, int* partial_tot_cells) {
   cl_int err;
 
   // Set kernel arguments
