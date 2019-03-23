@@ -17,6 +17,7 @@
 #define FINALSTATEFILE  "final_state.dat"
 #define AVVELSFILE      "av_vels.dat"
 #define OCLFILE         "kernels.cl"
+#define LOCAL_SIZE      16
 
 // struct to hold the parameter values
 typedef struct {
@@ -38,7 +39,9 @@ typedef struct {
 
   cl_program program;
   cl_kernel  accelerate_flow;
+  cl_kernel  accelerate_flow_flipped;
   cl_kernel  computation;
+  cl_kernel  computation_flipped;
 
   cl_mem cells;
   cl_mem tmp_cells;
@@ -132,8 +135,6 @@ int main(int argc, char* argv[]) {
                              obstacles, 0, NULL, NULL);
   checkError(err, "writing obstacles data", __LINE__);
 
-  printf("tot_cells: %d\n", params.tot_cells);
-
   for (int tt = 0; tt < params.maxIters; tt+=2) {
     av_vels[tt]   = timestep(params, ocl, partial_velocities, true);
     av_vels[tt+1] = timestep(params, ocl, partial_velocities, false);
@@ -176,56 +177,25 @@ int main(int argc, char* argv[]) {
 }
 
 float timestep(const t_param params, t_ocl ocl, float* partial_velocities, bool regular) {
-  accelerate_flow(params, ocl, regular);
-  return computation(params, ocl, partial_velocities, regular);
-}
-
-int accelerate_flow(const t_param params, t_ocl ocl, bool regular) {
   cl_int err;
 
-  // Set kernel arguments
-  if (regular) {
-    err = clSetKernelArg(ocl.accelerate_flow, 0, sizeof(cl_mem), &ocl.cells);
-    checkError(err, "setting accelerate_flow arg 0", __LINE__);
-  } else {
-    err = clSetKernelArg(ocl.accelerate_flow, 0, sizeof(cl_mem), &ocl.tmp_cells);
-    checkError(err, "setting accelerate_flow arg 0", __LINE__);
-  }
-
   // Enqueue kernel
-  size_t global[1] = {params.nx};
-  err = clEnqueueNDRangeKernel(ocl.queue, ocl.accelerate_flow,
-                               1, NULL, global, NULL, 0, NULL, NULL);
+  size_t accelerate_global[1] = {params.nx};
+  err = clEnqueueNDRangeKernel(ocl.queue,
+                               (regular) ? ocl.accelerate_flow : ocl.accelerate_flow_flipped,
+                               1, NULL, accelerate_global, NULL, 0, NULL, NULL);
   checkError(err, "enqueueing accelerate_flow kernel", __LINE__);
 
   // Wait for kernel to finish
   err = clFinish(ocl.queue);
   checkError(err, "waiting for accelerate_flow kernel", __LINE__);
 
-  return EXIT_SUCCESS;
-}
-
-float computation(const t_param params, t_ocl ocl, float* partial_velocities, bool regular) {
-  cl_int err;
-
-  // Set kernel arguments
-  if (regular) {
-    err = clSetKernelArg(ocl.computation, 0, sizeof(cl_mem), &ocl.cells);
-    checkError(err, "setting computation arg 0", __LINE__);
-    err = clSetKernelArg(ocl.computation, 1, sizeof(cl_mem), &ocl.tmp_cells);
-    checkError(err, "setting computation arg 1", __LINE__);
-  } else {
-    err = clSetKernelArg(ocl.computation, 0, sizeof(cl_mem), &ocl.tmp_cells);
-    checkError(err, "setting computation arg 0", __LINE__);
-    err = clSetKernelArg(ocl.computation, 1, sizeof(cl_mem), &ocl.cells);
-    checkError(err, "setting computation arg 1", __LINE__);
-  }
-
   // Enqueue kernel
-  size_t global[2] = {params.nx, params.ny};
+  size_t computation_global[2] = {params.nx, params.ny};
   size_t local[2] = {ocl.local_size, ocl.local_size};
-  err = clEnqueueNDRangeKernel(ocl.queue, ocl.computation,
-                               2, NULL, global, local, 0, NULL, NULL);
+  err = clEnqueueNDRangeKernel(ocl.queue,
+                               (regular) ? ocl.computation : ocl.computation_flipped,
+                               2, NULL, computation_global, local, 0, NULL, NULL);
   checkError(err, "enqueueing computation kernel", __LINE__);
 
   // Read velocities from device
@@ -489,6 +459,11 @@ int initialise(const char* paramfile, const char* obstaclefile,
   ocl->computation = clCreateKernel(ocl->program, "computation", &err);
   checkError(err, "creating computation kernel", __LINE__);
 
+  ocl->accelerate_flow_flipped = clCreateKernel(ocl->program, "accelerate_flow", &err);
+  checkError(err, "creating accelerate_flow_flipped kernel", __LINE__);
+  ocl->computation_flipped = clCreateKernel(ocl->program, "computation", &err);
+  checkError(err, "creating computation_flipped kernel", __LINE__);
+
   // Allocate OpenCL buffers
   ocl->cells = clCreateBuffer(ocl->context, CL_MEM_READ_WRITE,
                               sizeof(float) * params->nx * params->ny * NSPEEDS, NULL, &err);
@@ -500,7 +475,7 @@ int initialise(const char* paramfile, const char* obstaclefile,
                                   sizeof(cl_int) * params->nx * params->ny, NULL, &err);
   checkError(err, "creating obstacles buffer", __LINE__);
 
-  ocl->local_size = 16;
+  ocl->local_size = LOCAL_SIZE;
   ocl->work_groups = (params->nx * params->ny) / (ocl->local_size * ocl->local_size);
 
   ocl->velocities = clCreateBuffer(ocl->context, CL_MEM_WRITE_ONLY,
@@ -536,6 +511,36 @@ int initialise(const char* paramfile, const char* obstaclefile,
   checkError(err, "setting computation arg 6", __LINE__);
   err = clSetKernelArg(ocl->computation, 7, sizeof(float) * ocl->local_size * ocl->local_size, NULL);
   checkError(err, "setting computation arg 7", __LINE__);
+
+  err = clSetKernelArg(ocl->accelerate_flow_flipped, 0, sizeof(cl_mem), &ocl->tmp_cells);
+  checkError(err, "setting accelerate_flow_flipped arg 0", __LINE__);
+  err = clSetKernelArg(ocl->accelerate_flow_flipped, 1, sizeof(cl_mem), &ocl->obstacles);
+  checkError(err, "setting accelerate_flow_flipped arg 1", __LINE__);
+  err = clSetKernelArg(ocl->accelerate_flow_flipped, 2, sizeof(cl_int), &params->nx);
+  checkError(err, "setting accelerate_flow_flipped arg 2", __LINE__);
+  err = clSetKernelArg(ocl->accelerate_flow_flipped, 3, sizeof(cl_int), &params->ny);
+  checkError(err, "setting accelerate_flow_flipped arg 3", __LINE__);
+  err = clSetKernelArg(ocl->accelerate_flow_flipped, 4, sizeof(cl_float), &params->density);
+  checkError(err, "setting accelerate_flow_flipped arg 4", __LINE__);
+  err = clSetKernelArg(ocl->accelerate_flow_flipped, 5, sizeof(cl_float), &params->accel);
+  checkError(err, "setting accelerate_flow_flipped arg 5", __LINE__);
+
+  err = clSetKernelArg(ocl->computation_flipped, 0, sizeof(cl_mem), &ocl->tmp_cells);
+  checkError(err, "setting computation_flipped arg 0", __LINE__);
+  err = clSetKernelArg(ocl->computation_flipped, 1, sizeof(cl_mem), &ocl->cells);
+  checkError(err, "setting computation_flipped arg 1", __LINE__);
+  err = clSetKernelArg(ocl->computation_flipped, 2, sizeof(cl_mem), &ocl->obstacles);
+  checkError(err, "setting computation_flipped arg 2", __LINE__);
+  err = clSetKernelArg(ocl->computation_flipped, 3, sizeof(cl_int), &params->nx);
+  checkError(err, "setting computation_flipped arg 3", __LINE__);
+  err = clSetKernelArg(ocl->computation_flipped, 4, sizeof(cl_int), &params->ny);
+  checkError(err, "setting computation_flipped arg 4", __LINE__);
+  err = clSetKernelArg(ocl->computation_flipped, 5, sizeof(cl_float), &params->omega);
+  checkError(err, "setting computation_flipped arg 5", __LINE__);
+  err = clSetKernelArg(ocl->computation_flipped, 6, sizeof(cl_mem), &ocl->velocities);
+  checkError(err, "setting computation_flipped arg 6", __LINE__);
+  err = clSetKernelArg(ocl->computation_flipped, 7, sizeof(float) * ocl->local_size * ocl->local_size, NULL);
+  checkError(err, "setting computation_flipped arg 7", __LINE__);
 
   return EXIT_SUCCESS;
 }

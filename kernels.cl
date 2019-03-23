@@ -54,15 +54,15 @@ kernel void computation(global float* cells,
   /* if the cell contains an obstacle */
   if (obstacles[jj*nx + ii]) {
 
-    tmp_cells[(0 * ny * nx) + (ii + jj* nx)] = speed0;
-    tmp_cells[(1 * ny * nx) + (ii + jj* nx)] = speed3;
-    tmp_cells[(2 * ny * nx) + (ii + jj* nx)] = speed4;
-    tmp_cells[(3 * ny * nx) + (ii + jj* nx)] = speed1;
-    tmp_cells[(4 * ny * nx) + (ii + jj* nx)] = speed2;
-    tmp_cells[(5 * ny * nx) + (ii + jj* nx)] = speed7;
-    tmp_cells[(6 * ny * nx) + (ii + jj* nx)] = speed8;
-    tmp_cells[(7 * ny * nx) + (ii + jj* nx)] = speed5;
-    tmp_cells[(8 * ny * nx) + (ii + jj* nx)] = speed6;
+    tmp_cells[(0 * ny * nx) + (ii + jj*nx)] = speed0;
+    tmp_cells[(1 * ny * nx) + (ii + jj*nx)] = speed3;
+    tmp_cells[(2 * ny * nx) + (ii + jj*nx)] = speed4;
+    tmp_cells[(3 * ny * nx) + (ii + jj*nx)] = speed1;
+    tmp_cells[(4 * ny * nx) + (ii + jj*nx)] = speed2;
+    tmp_cells[(5 * ny * nx) + (ii + jj*nx)] = speed7;
+    tmp_cells[(6 * ny * nx) + (ii + jj*nx)] = speed8;
+    tmp_cells[(7 * ny * nx) + (ii + jj*nx)] = speed5;
+    tmp_cells[(8 * ny * nx) + (ii + jj*nx)] = speed6;
 
   } else {
 
@@ -79,15 +79,15 @@ kernel void computation(global float* cells,
     float u8 =   u_x - u_y;  /* south-east */
 
     /* relaxation step */
-    tmp_cells[(0 * ny * nx) + (ii + jj* nx)] = speed0 + omega * (w0 * local_density * const_val - speed0);
-    tmp_cells[(1 * ny * nx) + (ii + jj* nx)] = speed1 + omega * (w1 * local_density * (u1 / c_sq + (u1 * u1) / denominator + const_val) - speed1);
-    tmp_cells[(2 * ny * nx) + (ii + jj* nx)] = speed2 + omega * (w1 * local_density * (u2 / c_sq + (u2 * u2) / denominator + const_val) - speed2);
-    tmp_cells[(3 * ny * nx) + (ii + jj* nx)] = speed3 + omega * (w1 * local_density * (u3 / c_sq + (u3 * u3) / denominator + const_val) - speed3);
-    tmp_cells[(4 * ny * nx) + (ii + jj* nx)] = speed4 + omega * (w1 * local_density * (u4 / c_sq + (u4 * u4) / denominator + const_val) - speed4);
-    tmp_cells[(5 * ny * nx) + (ii + jj* nx)] = speed5 + omega * (w2 * local_density * (u5 / c_sq + (u5 * u5) / denominator + const_val) - speed5);
-    tmp_cells[(6 * ny * nx) + (ii + jj* nx)] = speed6 + omega * (w2 * local_density * (u6 / c_sq + (u6 * u6) / denominator + const_val) - speed6);
-    tmp_cells[(7 * ny * nx) + (ii + jj* nx)] = speed7 + omega * (w2 * local_density * (u7 / c_sq + (u7 * u7) / denominator + const_val) - speed7);
-    tmp_cells[(8 * ny * nx) + (ii + jj* nx)] = speed8 + omega * (w2 * local_density * (u8 / c_sq + (u8 * u8) / denominator + const_val) - speed8);
+    tmp_cells[(0 * ny * nx) + (ii + jj*nx)] = speed0 + omega * (w0 * local_density * const_val - speed0);
+    tmp_cells[(1 * ny * nx) + (ii + jj*nx)] = speed1 + omega * (w1 * local_density * (u1 / c_sq + (u1 * u1) / denominator + const_val) - speed1);
+    tmp_cells[(2 * ny * nx) + (ii + jj*nx)] = speed2 + omega * (w1 * local_density * (u2 / c_sq + (u2 * u2) / denominator + const_val) - speed2);
+    tmp_cells[(3 * ny * nx) + (ii + jj*nx)] = speed3 + omega * (w1 * local_density * (u3 / c_sq + (u3 * u3) / denominator + const_val) - speed3);
+    tmp_cells[(4 * ny * nx) + (ii + jj*nx)] = speed4 + omega * (w1 * local_density * (u4 / c_sq + (u4 * u4) / denominator + const_val) - speed4);
+    tmp_cells[(5 * ny * nx) + (ii + jj*nx)] = speed5 + omega * (w2 * local_density * (u5 / c_sq + (u5 * u5) / denominator + const_val) - speed5);
+    tmp_cells[(6 * ny * nx) + (ii + jj*nx)] = speed6 + omega * (w2 * local_density * (u6 / c_sq + (u6 * u6) / denominator + const_val) - speed6);
+    tmp_cells[(7 * ny * nx) + (ii + jj*nx)] = speed7 + omega * (w2 * local_density * (u7 / c_sq + (u7 * u7) / denominator + const_val) - speed7);
+    tmp_cells[(8 * ny * nx) + (ii + jj*nx)] = speed8 + omega * (w2 * local_density * (u8 / c_sq + (u8 * u8) / denominator + const_val) - speed8);
   }
 
   /* accumulate the norm of x- and y- velocity components */
