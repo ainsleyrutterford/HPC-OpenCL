@@ -8,9 +8,7 @@ kernel void computation(global float* cells,
                         int nx, int ny,
                         float omega,
                         global float* global_velocities,
-                        global int*   global_tot_cells,
-                        local  float* local_velocities,
-                        local  int*   local_tot_cells) {
+                        local  float* local_velocities) {
 
   float c_sq = 1.f / 3.f;  /* square of speed of sound */
   float w0   = 4.f / 9.f;  /* weighting factor */
@@ -18,7 +16,6 @@ kernel void computation(global float* cells,
   float w2   = 1.f / 36.f; /* weighting factor */
   float denominator = 2.f * c_sq * c_sq;
 
-  int   tot_cells = 0; /* no. of cells used in calculation */
   float tot_u = 0.f;   /* accumulated magnitudes of velocity for each cell */
 
   int local_id_x = get_local_id(0);
@@ -47,8 +44,8 @@ kernel void computation(global float* cells,
 
   /* compute local density total */
   float local_density = speed0 + speed1 + speed2
-                            + speed3 + speed4 + speed5
-                            + speed6 + speed7 + speed8;
+                      + speed3 + speed4 + speed5
+                      + speed6 + speed7 + speed8;
 
   /* compute x and y velocity components */
   float u_x = (speed1 + speed5 + speed8 - (speed3 + speed6 + speed7)) / local_density;
@@ -95,11 +92,8 @@ kernel void computation(global float* cells,
 
   /* accumulate the norm of x- and y- velocity components */
   tot_u = (obstacles[jj*nx + ii]) ? 0 : sqrt((u_x * u_x) + (u_y * u_y));
-  /* increase counter of inspected cells */
-  tot_cells = (obstacles[jj*nx + ii]) ? 0 : 1;
 
   local_velocities[local_id_x + local_id_y * local_size_x] = tot_u;
-  local_tot_cells[local_id_x + local_id_y * local_size_x] = tot_cells;
 
   int group_id_x    = get_group_id(0);
   int group_id_y    = get_group_id(1);
@@ -115,14 +109,11 @@ kernel void computation(global float* cells,
     if ((local_id_x + local_id_y * local_size_x) < stride) {
       local_velocities[local_id_x + local_id_y * local_size_x] +=
       local_velocities[(local_id_x + local_id_y * local_size_x) + stride];
-      local_tot_cells[local_id_x + local_id_y * local_size_x] +=
-      local_tot_cells[(local_id_x + local_id_y * local_size_x) + stride];
     }
   }
 
   if (local_id_x == 0 && local_id_y == 0) {
     global_velocities[group_id_x + group_id_y * work_groups_x] = local_velocities[0];
-    global_tot_cells[group_id_x + group_id_y * work_groups_x] = local_tot_cells[0];
   }
 }
 
