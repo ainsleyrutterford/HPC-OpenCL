@@ -8,7 +8,8 @@ kernel void computation(global float* cells,
                         int nx, int ny,
                         float omega,
                         global float* global_velocities,
-                        local  float* local_velocities) {
+                        local  float* local_velocities,
+                        float density, float accel) {
 
   float c_sq = 1.f / 3.f;  /* square of speed of sound */
   float w0   = 4.f / 9.f;  /* weighting factor */
@@ -94,6 +95,25 @@ kernel void computation(global float* cells,
   tot_u = (obstacles[jj*nx + ii]) ? 0 : sqrt((u_x * u_x) + (u_y * u_y));
 
   local_velocities[local_id_x + local_id_y * local_size_x] = tot_u;
+
+  // compute weighting factors
+  float w1_acc = density * accel / 9.0;
+  float w2_acc = density * accel / 36.0;
+
+  // if the cell is not occupied and we don't send a negative density
+  if (jj == ny - 2 && !obstacles[ii + jj*nx]
+      && (tmp_cells[(3 * ny * nx) + (ii + jj*nx)] - w1_acc) > 0.f
+      && (tmp_cells[(6 * ny * nx) + (ii + jj*nx)] - w2_acc) > 0.f
+      && (tmp_cells[(7 * ny * nx) + (ii + jj*nx)] - w2_acc) > 0.f) {
+    // increase 'east-side' densities
+    tmp_cells[(1 * ny * nx) + (ii + jj*nx)] += w1_acc;
+    tmp_cells[(5 * ny * nx) + (ii + jj*nx)] += w2_acc;
+    tmp_cells[(8 * ny * nx) + (ii + jj*nx)] += w2_acc;
+    // decrease 'west-side' densities
+    tmp_cells[(3 * ny * nx) + (ii + jj*nx)] -= w1_acc;
+    tmp_cells[(6 * ny * nx) + (ii + jj*nx)] -= w2_acc;
+    tmp_cells[(7 * ny * nx) + (ii + jj*nx)] -= w2_acc;
+  }
 
   int group_id_x    = get_group_id(0);
   int group_id_y    = get_group_id(1);
