@@ -66,24 +66,24 @@ kernel void computation(global float* cells,
   const float u7 = - u_x - u_y;  /* south-west */
   const float u8 =   u_x - u_y;  /* south-east */
 
-  const float relaxation0 = (1 - mask) * (speed0 + omega * (w0 * local_density * const_val - speed0)                                        ) + mask * speed0;
-  const float relaxation1 = (1 - mask) * (speed1 + omega * (w1 * local_density * (u1 / c_sq + (u1 * u1) / denominator + const_val) - speed1)) + mask * speed3;
-  const float relaxation2 = (1 - mask) * (speed2 + omega * (w1 * local_density * (u2 / c_sq + (u2 * u2) / denominator + const_val) - speed2)) + mask * speed4;
-  const float relaxation3 = (1 - mask) * (speed3 + omega * (w1 * local_density * (u3 / c_sq + (u3 * u3) / denominator + const_val) - speed3)) + mask * speed1;
-  const float relaxation4 = (1 - mask) * (speed4 + omega * (w1 * local_density * (u4 / c_sq + (u4 * u4) / denominator + const_val) - speed4)) + mask * speed2;
-  const float relaxation5 = (1 - mask) * (speed5 + omega * (w2 * local_density * (u5 / c_sq + (u5 * u5) / denominator + const_val) - speed5)) + mask * speed7;
-  const float relaxation6 = (1 - mask) * (speed6 + omega * (w2 * local_density * (u6 / c_sq + (u6 * u6) / denominator + const_val) - speed6)) + mask * speed8;
-  const float relaxation7 = (1 - mask) * (speed7 + omega * (w2 * local_density * (u7 / c_sq + (u7 * u7) / denominator + const_val) - speed7)) + mask * speed5;
-  const float relaxation8 = (1 - mask) * (speed8 + omega * (w2 * local_density * (u8 / c_sq + (u8 * u8) / denominator + const_val) - speed8)) + mask * speed6;
+  const float relaxation0 = (float) (1 - mask) * (speed0 + omega * (w0 * local_density * const_val - speed0)                                        ) + (float) mask * speed0;
+  const float relaxation1 = (float) (1 - mask) * (speed1 + omega * (w1 * local_density * (u1 / c_sq + (u1 * u1) / denominator + const_val) - speed1)) + (float) mask * speed3;
+  const float relaxation2 = (float) (1 - mask) * (speed2 + omega * (w1 * local_density * (u2 / c_sq + (u2 * u2) / denominator + const_val) - speed2)) + (float) mask * speed4;
+  const float relaxation3 = (float) (1 - mask) * (speed3 + omega * (w1 * local_density * (u3 / c_sq + (u3 * u3) / denominator + const_val) - speed3)) + (float) mask * speed1;
+  const float relaxation4 = (float) (1 - mask) * (speed4 + omega * (w1 * local_density * (u4 / c_sq + (u4 * u4) / denominator + const_val) - speed4)) + (float) mask * speed2;
+  const float relaxation5 = (float) (1 - mask) * (speed5 + omega * (w2 * local_density * (u5 / c_sq + (u5 * u5) / denominator + const_val) - speed5)) + (float) mask * speed7;
+  const float relaxation6 = (float) (1 - mask) * (speed6 + omega * (w2 * local_density * (u6 / c_sq + (u6 * u6) / denominator + const_val) - speed6)) + (float) mask * speed8;
+  const float relaxation7 = (float) (1 - mask) * (speed7 + omega * (w2 * local_density * (u7 / c_sq + (u7 * u7) / denominator + const_val) - speed7)) + (float) mask * speed5;
+  const float relaxation8 = (float) (1 - mask) * (speed8 + omega * (w2 * local_density * (u8 / c_sq + (u8 * u8) / denominator + const_val) - speed8)) + (float) mask * speed6;
 
   /* accumulate the norm of x- and y- velocity components */
-  tot_u = (mask) ? 0 : sqrt((u_x * u_x) + (u_y * u_y));
+  tot_u = (float) (1 - mask) * (float) sqrt((u_x * u_x) + (u_y * u_y));
 
   local_velocities[local_id_x + local_id_y * local_size_x] = tot_u;
 
   // compute weighting factors
-  const float w1_acc = density * accel / 9.0;
-  const float w2_acc = density * accel / 36.0;
+  const float w1_acc = density * accel / 9.f;
+  const float w2_acc = density * accel / 36.f;
 
   // if the cell is not occupied and we don't send a negative density
   const float mask_two = (jj == ny - 2 && !mask
