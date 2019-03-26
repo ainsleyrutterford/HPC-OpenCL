@@ -28,7 +28,7 @@ typedef struct {
   float density;       // density per link
   float accel;         // density redistribution
   float omega;         // relaxation parameter
-  int   tot_cells;
+  int   tot_cells;     // total unblocked cells
 } t_param;
 
 // struct to hold OpenCL objects
@@ -160,6 +160,7 @@ int main(int argc, char* argv[]) {
                             sizeof(float) * params.nx * params.ny * NSPEEDS,
                             tmp_cells, 0, NULL, NULL);
   checkError(err, "reading tmp_cells data", __LINE__);
+
   // Read cells from device
   err = clEnqueueReadBuffer(ocl.queue, ocl.cells, CL_TRUE, 0,
                             sizeof(float) * params.nx * params.ny * NSPEEDS,
@@ -216,18 +217,15 @@ float timestep(const t_param params, t_ocl ocl, float* partial_velocities, bool 
 }
 
 float av_velocity(const t_param params, float* cells, int* obstacles, t_ocl ocl) {
-  int   tot_cells = 0;  /* no. of cells used in calculation */
-  float tot_u;          /* accumulated magnitudes of velocity for each cell */
+  int   tot_cells = 0;   // no. of cells used in calculation
+  float tot_u     = 0.f; // accumulated magnitudes of velocity for each cell
 
-  /* initialise */
-  tot_u = 0.f;
-
-  /* loop over all non-blocked cells */
+  // loop over all non-blocked cells
   for (int jj = 0; jj < params.ny; jj++) {
     for (int ii = 0; ii < params.nx; ii++) {
-      /* ignore occupied cells */
+      // ignore occupied cells
       if (!obstacles[ii + jj*params.nx]) {
-        /* local density total */
+        // local density total
         float local_density = cells[(0 * params.ny * params.nx) + (ii + jj*params.nx)]
                             + cells[(1 * params.ny * params.nx) + (ii + jj*params.nx)]
                             + cells[(2 * params.ny * params.nx) + (ii + jj*params.nx)]
@@ -238,7 +236,7 @@ float av_velocity(const t_param params, float* cells, int* obstacles, t_ocl ocl)
                             + cells[(7 * params.ny * params.nx) + (ii + jj*params.nx)]
                             + cells[(8 * params.ny * params.nx) + (ii + jj*params.nx)];
 
-        /* compute x velocity component */
+        // compute x velocity component
         float u_x = (cells[(1 * params.ny * params.nx) + (ii + jj*params.nx)]
                    + cells[(5 * params.ny * params.nx) + (ii + jj*params.nx)]
                    + cells[(8 * params.ny * params.nx) + (ii + jj*params.nx)]
@@ -246,7 +244,7 @@ float av_velocity(const t_param params, float* cells, int* obstacles, t_ocl ocl)
                    + cells[(6 * params.ny * params.nx) + (ii + jj*params.nx)]
                    + cells[(7 * params.ny * params.nx) + (ii + jj*params.nx)]))
                    / local_density;
-        /* compute y velocity component */
+        // compute y velocity component
         float u_y = (cells[(2 * params.ny * params.nx) + (ii + jj*params.nx)]
                    + cells[(5 * params.ny * params.nx) + (ii + jj*params.nx)]
                    + cells[(6 * params.ny * params.nx) + (ii + jj*params.nx)]
@@ -254,9 +252,9 @@ float av_velocity(const t_param params, float* cells, int* obstacles, t_ocl ocl)
                    + cells[(7 * params.ny * params.nx) + (ii + jj*params.nx)]
                    + cells[(8 * params.ny * params.nx) + (ii + jj*params.nx)]))
                    / local_density;
-        /* accumulate the norm of x- and y- velocity components */
+        // accumulate the norm of x- and y- velocity components
         tot_u += sqrtf((u_x * u_x) + (u_y * u_y));
-        /* increase counter of inspected cells */
+        // increase counter of inspected cells
         ++tot_cells;
       }
     }
@@ -268,13 +266,13 @@ return tot_u / (float) tot_cells;
 int initialise(const char* paramfile, const char* obstaclefile,
                t_param* params, float** cells_ptr, float** tmp_cells_ptr,
                int** obstacles_ptr, float** av_vels_ptr, t_ocl *ocl) {
-  char   message[1024]; // message buffer
-  FILE*   fp;           // file pointer
-  int    xx, yy;        // generic array indices
-  int    blocked;       // indicates whether a cell is blocked by an obstacle
-  int    retval;        // to hold return value for checking
-  char*  ocl_src;       // OpenCL kernel source
-  long   ocl_size;      // size of OpenCL kernel source
+  char  message[1024]; // message buffer
+  FILE* fp;            // file pointer
+  int   xx, yy;        // generic array indices
+  int   blocked;       // indicates whether a cell is blocked by an obstacle
+  int   retval;        // to hold return value for checking
+  char* ocl_src;       // OpenCL kernel source
+  long  ocl_size;      // size of OpenCL kernel source
 
   // open the parameter file
   fp = fopen(paramfile, "r");
@@ -315,25 +313,6 @@ int initialise(const char* paramfile, const char* obstaclefile,
 
   // and close up the fil/
   fclose(fp);
-
-  /*
-  ** Allocate memory.
-  **
-  ** Remember C is pass-by-value, so we need to
-  ** pass pointers into the initialise function.
-  **
-  ** NB we are allocating a 1D array, so that the
-  ** memory will be contiguous.  We still want to
-  ** index this memory as if it were a (row major
-  ** ordered) 2D array, however.  We will perform
-  ** some arithmetic using the row and column
-  ** coordinates, inside the square brackets, when
-  ** we want to access elements of this array.
-  **
-  ** Note also that we are using a structure to
-  ** hold an array of 'speeds'.  We will allocate
-  ** a 1D array of these structs.
-  */
 
   // main grid
   *cells_ptr = malloc(sizeof(float) * NSPEEDS * params->ny * params->nx);
@@ -399,6 +378,7 @@ int initialise(const char* paramfile, const char* obstaclefile,
 
     // assign to array
     (*obstacles_ptr)[xx + yy*params->nx] = blocked;
+
     params->tot_cells--;
   }
 
@@ -429,14 +409,14 @@ int initialise(const char* paramfile, const char* obstaclefile,
   // Load OpenCL kernel source
   fseek(fp, 0, SEEK_END);
   ocl_size = ftell(fp) + 1;
-  ocl_src = (char*)malloc(ocl_size);
+  ocl_src = (char*) malloc(ocl_size);
   memset(ocl_src, 0, ocl_size);
   fseek(fp, 0, SEEK_SET);
   fread(ocl_src, 1, ocl_size, fp);
   fclose(fp);
 
   // Create OpenCL program
-  ocl->program = clCreateProgramWithSource(ocl->context, 1, (const char**)&ocl_src, NULL, &err);
+  ocl->program = clCreateProgramWithSource(ocl->context, 1, (const char**) &ocl_src, NULL, &err);
   free(ocl_src);
   checkError(err, "creating program", __LINE__);
 
@@ -552,7 +532,6 @@ int initialise(const char* paramfile, const char* obstaclefile,
   return EXIT_SUCCESS;
 }
 
-// TODO: Complete me
 int finalise(const t_param* params, float** cells_ptr, float** tmp_cells_ptr,
              int** obstacles_ptr, float** av_vels_ptr, t_ocl ocl) {
   // free up allocated memory
@@ -630,20 +609,20 @@ int write_values(const t_param params, float* cells, int* obstacles, float* av_v
 
         // compute x velocity component
         u_x = (cells[(1 * params.ny * params.nx) + (ii + jj*params.nx)]
-               + cells[(5 * params.ny * params.nx) + (ii + jj*params.nx)]
-               + cells[(8 * params.ny * params.nx) + (ii + jj*params.nx)]
-               - (cells[(3 * params.ny * params.nx) + (ii + jj*params.nx)]
-                  + cells[(6 * params.ny * params.nx) + (ii + jj*params.nx)]
-                  + cells[(7 * params.ny * params.nx) + (ii + jj*params.nx)]))
-              / local_density;
+            +  cells[(5 * params.ny * params.nx) + (ii + jj*params.nx)]
+            +  cells[(8 * params.ny * params.nx) + (ii + jj*params.nx)]
+            - (cells[(3 * params.ny * params.nx) + (ii + jj*params.nx)]
+            +  cells[(6 * params.ny * params.nx) + (ii + jj*params.nx)]
+            +  cells[(7 * params.ny * params.nx) + (ii + jj*params.nx)]))
+            /  local_density;
         // compute y velocity component
         u_y = (cells[(2 * params.ny * params.nx) + (ii + jj*params.nx)]
-               + cells[(5 * params.ny * params.nx) + (ii + jj*params.nx)]
-               + cells[(6 * params.ny * params.nx) + (ii + jj*params.nx)]
-               - (cells[(4 * params.ny * params.nx) + (ii + jj*params.nx)]
-                  + cells[(7 * params.ny * params.nx) + (ii + jj*params.nx)]
-                  + cells[(8 * params.ny * params.nx) + (ii + jj*params.nx)]))
-              / local_density;
+            +  cells[(5 * params.ny * params.nx) + (ii + jj*params.nx)]
+            +  cells[(6 * params.ny * params.nx) + (ii + jj*params.nx)]
+            - (cells[(4 * params.ny * params.nx) + (ii + jj*params.nx)]
+            +  cells[(7 * params.ny * params.nx) + (ii + jj*params.nx)]
+            +  cells[(8 * params.ny * params.nx) + (ii + jj*params.nx)]))
+            /  local_density;
         // compute norm of velocity
         u = sqrtf((u_x * u_x) + (u_y * u_y));
         // compute pressure
