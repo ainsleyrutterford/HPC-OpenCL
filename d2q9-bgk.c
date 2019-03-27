@@ -42,12 +42,14 @@ typedef struct {
   cl_kernel  accelerate_flow_flipped;
   cl_kernel  computation;
   cl_kernel  computation_flipped;
+  cl_kernel  reduce;
 
   cl_mem cells;
   cl_mem tmp_cells;
   cl_mem obstacles;
 
   cl_mem velocities;
+  cl_mem average_vels;
 
   size_t local_size;
   int    work_groups;
@@ -60,9 +62,9 @@ int initialise(const char* paramfile, const char* obstaclefile,
                t_param* params, float** cells_ptr, float** tmp_cells_ptr,
                int** obstacles_ptr, float** av_vels_ptr, t_ocl* ocl);
 
-float timestep(const t_param params, t_ocl ocl, float* partial_velocities, bool regular);
+int timestep(const t_param params, t_ocl ocl, bool regular);
 int accelerate_flow(const t_param params, t_ocl ocl, bool regular);
-float computation(const t_param params, t_ocl ocl, float* partial_velocities, bool regular);
+float computation(const t_param params, t_ocl ocl, bool regular);
 int write_values(const t_param params, float* cells, int* obstacles, float* av_vels);
 
 // finalise, including freeing up allocated memory
@@ -113,12 +115,6 @@ int main(int argc, char* argv[]) {
   // initialise our data structures and load values from file
   initialise(paramfile, obstaclefile, &params, &cells, &tmp_cells, &obstacles, &av_vels, &ocl);
 
-  float* partial_velocities = calloc(ocl.work_groups, sizeof(float));
-  if (!partial_velocities) {
-    printf("Error: could not allocate host memory for partial_velocities\n");
-    return EXIT_FAILURE;
-  }
-
   // iterate for maxIters timesteps
   gettimeofday(&timstr, NULL);
   tic = timstr.tv_sec + (timstr.tv_usec / 1000000.0);
@@ -145,15 +141,37 @@ int main(int argc, char* argv[]) {
   err = clFinish(ocl.queue);
   checkError(err, "waiting for accelerate_flow kernel", __LINE__);
 
-  for (int tt = 0; tt < params.maxIters; tt+=2) {
-    av_vels[tt]   = timestep(params, ocl, partial_velocities, true);
-    av_vels[tt+1] = timestep(params, ocl, partial_velocities, false);
+  for (int tt = 0; tt < params.maxIters; tt++) {
+    err = clSetKernelArg(ocl.computation, 10, sizeof(cl_int), &tt);
+    checkError(err, "setting computation arg 10", __LINE__);
+    timestep(params, ocl, true);
+    tt++;
+    err = clSetKernelArg(ocl.computation_flipped, 10, sizeof(cl_int), &tt);
+    checkError(err, "setting computation_flipped arg 10", __LINE__);
+    timestep(params, ocl, false);
     #ifdef DEBUG
       printf("==timestep: %d==\n", tt);
       printf("av velocity: %.12E\n", av_vels[tt]);
       printf("tot density: %.12E\n", total_density(params, cells));
     #endif
   }
+
+  // Enqueue kernel
+  size_t reduce_global[1] = {params.maxIters};
+  size_t reduce_local[1] = {1};
+  err = clEnqueueNDRangeKernel(ocl.queue, ocl.reduce,
+                               1, NULL, reduce_global, reduce_local, 0, NULL, NULL);
+  checkError(err, "enqueueing reduce kernel", __LINE__);
+
+  // Wait for kernel to finish
+  err = clFinish(ocl.queue);
+  checkError(err, "waiting for reduce kernel", __LINE__);
+
+  // Read av_vels from device
+  err = clEnqueueReadBuffer(ocl.queue, ocl.average_vels, CL_TRUE, 0,
+                            sizeof(float) * params.maxIters,
+                            av_vels, 0, NULL, NULL);
+  checkError(err, "reading tmp_cells data", __LINE__);
 
   // Read tmp_cells from device
   err = clEnqueueReadBuffer(ocl.queue, ocl.tmp_cells, CL_TRUE, 0,
@@ -187,7 +205,7 @@ int main(int argc, char* argv[]) {
   return EXIT_SUCCESS;
 }
 
-float timestep(const t_param params, t_ocl ocl, float* partial_velocities, bool regular) {
+int timestep(const t_param params, t_ocl ocl, bool regular) {
   cl_int err;
 
   // Enqueue kernel
@@ -198,22 +216,11 @@ float timestep(const t_param params, t_ocl ocl, float* partial_velocities, bool 
                                2, NULL, computation_global, local, 0, NULL, NULL);
   checkError(err, "enqueueing computation kernel", __LINE__);
 
-  // Read velocities from device
-  err = clEnqueueReadBuffer(ocl.queue, ocl.velocities, CL_TRUE, 0,
-                            sizeof(float) * ocl.work_groups,
-                            partial_velocities, 0, NULL, NULL);
-  checkError(err, "reading velocities data", __LINE__);
-
   // Wait for kernel to finish
   err = clFinish(ocl.queue);
   checkError(err, "waiting for computation kernel", __LINE__);
 
-  float total_velocity = 0.f;
-  for (int i = 0; i < ocl.work_groups; i++) {
-    total_velocity += partial_velocities[i];
-  }
-
-  return total_velocity / (float) params.tot_cells;
+  return EXIT_SUCCESS;
 }
 
 float av_velocity(const t_param params, float* cells, int* obstacles, t_ocl ocl) {
@@ -443,6 +450,9 @@ int initialise(const char* paramfile, const char* obstaclefile,
   ocl->computation_flipped = clCreateKernel(ocl->program, "computation", &err);
   checkError(err, "creating computation_flipped kernel", __LINE__);
 
+  ocl->reduce = clCreateKernel(ocl->program, "reduce", &err);
+  checkError(err, "creating reduce kernel", __LINE__);
+
   // Allocate OpenCL buffers
   ocl->cells = clCreateBuffer(ocl->context, CL_MEM_READ_WRITE,
                               sizeof(float) * params->nx * params->ny * NSPEEDS, NULL, &err);
@@ -457,9 +467,24 @@ int initialise(const char* paramfile, const char* obstaclefile,
   ocl->local_size = LOCAL_SIZE;
   ocl->work_groups = (params->nx * params->ny) / (ocl->local_size * ocl->local_size);
 
-  ocl->velocities = clCreateBuffer(ocl->context, CL_MEM_WRITE_ONLY,
-                                   sizeof(float) * ocl->work_groups, NULL, &err);
+  ocl->velocities = clCreateBuffer(ocl->context, CL_MEM_READ_WRITE,
+                                   sizeof(float) * ocl->work_groups * params->maxIters, NULL, &err);
   checkError(err, "creating velocities buffer", __LINE__);
+
+  ocl->average_vels = clCreateBuffer(ocl->context, CL_MEM_WRITE_ONLY,
+                                   sizeof(float) * params->maxIters, NULL, &err);
+  checkError(err, "creating average_vels buffer", __LINE__);
+
+  float tot_cells = (float) params->tot_cells;
+
+  err = clSetKernelArg(ocl->reduce, 0, sizeof(cl_mem), &ocl->velocities);
+  checkError(err, "setting reduce arg 0", __LINE__);
+  err = clSetKernelArg(ocl->reduce, 1, sizeof(cl_mem), &ocl->average_vels);
+  checkError(err, "setting reduce arg 1", __LINE__);
+  err = clSetKernelArg(ocl->reduce, 2, sizeof(cl_int), &tot_cells);
+  checkError(err, "setting reduce arg 2", __LINE__);
+  err = clSetKernelArg(ocl->reduce, 3, sizeof(cl_int), &ocl->work_groups);
+  checkError(err, "setting reduce arg 3", __LINE__);
 
   err = clSetKernelArg(ocl->accelerate_flow, 0, sizeof(cl_mem), &ocl->cells);
   checkError(err, "setting accelerate_flow arg 0", __LINE__);

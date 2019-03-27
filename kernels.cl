@@ -9,7 +9,8 @@ kernel void computation(global float* cells,
                         const float omega,
                         global float* global_velocities,
                         local  float* local_velocities,
-                        const float density, const float accel) {
+                        const float density, const float accel,
+                        const int iteration) {
 
   const float c_sq = 1.f / 3.f;  /* square of speed of sound */
   const float w0   = 4.f / 9.f;  /* weighting factor */
@@ -105,11 +106,14 @@ kernel void computation(global float* cells,
   const int group_id_y    = get_group_id(1);
 
   const int work_groups_x = get_global_size(0) / local_size_x;
+  const int work_groups_y = get_global_size(1) / local_size_y;
+  const int work_groups = work_groups_x * work_groups_y;
 
   const uint group_size = local_size_x * local_size_y;
 
   for (uint stride = group_size / 2; stride > 0; stride /= 2) {
 
+    // Can move this outside of the for loop I think
     barrier(CLK_LOCAL_MEM_FENCE);
 
     if ((local_id_x + local_id_y * local_size_x) < stride) {
@@ -119,8 +123,27 @@ kernel void computation(global float* cells,
   }
 
   if (local_id_x == 0 && local_id_y == 0) {
-    global_velocities[group_id_x + group_id_y * work_groups_x] = local_velocities[0];
+    global_velocities[(group_id_x + group_id_y * work_groups_x) + (iteration * work_groups)] = local_velocities[0];
   }
+}
+
+kernel void reduce(global float* velocities,
+                   global float* average_vels,
+                   const float tot_cells,
+                   const int work_groups) {
+
+  const int iter = get_global_id(0);
+  const int local_id = get_local_id(0);
+
+  float vel = 0.f;
+
+  if (local_id == 0) {
+    for (int group_id = 0; group_id < work_groups; group_id++) {
+      vel += velocities[(group_id) + (iter * work_groups)];
+    }
+    average_vels[iter] = vel / tot_cells;
+  }
+
 }
 
 kernel void accelerate_flow(global float* cells,
