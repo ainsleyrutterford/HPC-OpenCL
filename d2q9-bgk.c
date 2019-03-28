@@ -136,10 +136,6 @@ int main(int argc, char* argv[]) {
                                1, NULL, accelerate_global, NULL, 0, NULL, NULL);
   checkError(err, "enqueueing accelerate_flow kernel", __LINE__);
 
-  // Wait for kernel to finish
-  err = clFinish(ocl.queue);
-  checkError(err, "waiting for accelerate_flow kernel", __LINE__);
-
   for (int tt = 0; tt < params.maxIters; tt++) {
     err = clSetKernelArg(ocl.computation, 10, sizeof(cl_int), &tt);
     checkError(err, "setting computation arg 10", __LINE__);
@@ -162,9 +158,11 @@ int main(int argc, char* argv[]) {
                                1, NULL, reduce_global, reduce_local, 0, NULL, NULL);
   checkError(err, "enqueueing reduce kernel", __LINE__);
 
-  // Wait for kernel to finish
-  err = clFinish(ocl.queue);
-  checkError(err, "waiting for reduce kernel", __LINE__);
+  // Read cells from device
+  err = clEnqueueReadBuffer(ocl.queue, ocl.cells, CL_TRUE, 0,
+                            sizeof(float) * params.nx * params.ny * NSPEEDS,
+                            cells, 0, NULL, NULL);
+  checkError(err, "reading cells data", __LINE__);
 
   // Read av_vels from device
   err = clEnqueueReadBuffer(ocl.queue, ocl.average_vels, CL_TRUE, 0,
@@ -172,11 +170,9 @@ int main(int argc, char* argv[]) {
                             av_vels, 0, NULL, NULL);
   checkError(err, "reading tmp_cells data", __LINE__);
 
-  // Read cells from device
-  err = clEnqueueReadBuffer(ocl.queue, ocl.cells, CL_TRUE, 0,
-                            sizeof(float) * params.nx * params.ny * NSPEEDS,
-                            cells, 0, NULL, NULL);
-  checkError(err, "reading cells data", __LINE__);
+  // Wait for kernel to finish
+  err = clFinish(ocl.queue);
+  checkError(err, "waiting for final kernel", __LINE__);
 
   gettimeofday(&timstr, NULL);
   toc = timstr.tv_sec + (timstr.tv_usec / 1000000.0);
@@ -208,10 +204,6 @@ int timestep(const t_param params, t_ocl ocl, bool regular) {
                                (regular) ? ocl.computation : ocl.computation_flipped,
                                2, NULL, computation_global, local, 0, NULL, NULL);
   checkError(err, "enqueueing computation kernel", __LINE__);
-
-  // Wait for kernel to finish
-  err = clFinish(ocl.queue);
-  checkError(err, "waiting for computation kernel", __LINE__);
 
   return EXIT_SUCCESS;
 }

@@ -111,7 +111,7 @@ kernel void computation(global float* cells,
 
   const uint group_size = local_size_x * local_size_y;
 
-  for (uint stride = group_size / 2; stride > 0; stride /= 2) {
+  for (uint stride = group_size / 2; stride > 0; stride >>= 1) {
 
     // Can move this outside of the for loop I think
     barrier(CLK_LOCAL_MEM_FENCE);
