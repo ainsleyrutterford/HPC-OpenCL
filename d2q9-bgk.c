@@ -39,7 +39,6 @@ typedef struct {
 
   cl_program program;
   cl_kernel  accelerate_flow;
-  cl_kernel  accelerate_flow_flipped;
   cl_kernel  computation;
   cl_kernel  computation_flipped;
   cl_kernel  reduce;
@@ -171,12 +170,6 @@ int main(int argc, char* argv[]) {
   err = clEnqueueReadBuffer(ocl.queue, ocl.average_vels, CL_TRUE, 0,
                             sizeof(float) * params.maxIters,
                             av_vels, 0, NULL, NULL);
-  checkError(err, "reading tmp_cells data", __LINE__);
-
-  // Read tmp_cells from device
-  err = clEnqueueReadBuffer(ocl.queue, ocl.tmp_cells, CL_TRUE, 0,
-                            sizeof(float) * params.nx * params.ny * NSPEEDS,
-                            tmp_cells, 0, NULL, NULL);
   checkError(err, "reading tmp_cells data", __LINE__);
 
   // Read cells from device
@@ -445,8 +438,6 @@ int initialise(const char* paramfile, const char* obstaclefile,
   ocl->computation = clCreateKernel(ocl->program, "computation", &err);
   checkError(err, "creating computation kernel", __LINE__);
 
-  ocl->accelerate_flow_flipped = clCreateKernel(ocl->program, "accelerate_flow", &err);
-  checkError(err, "creating accelerate_flow_flipped kernel", __LINE__);
   ocl->computation_flipped = clCreateKernel(ocl->program, "computation", &err);
   checkError(err, "creating computation_flipped kernel", __LINE__);
 
@@ -519,19 +510,6 @@ int initialise(const char* paramfile, const char* obstaclefile,
   checkError(err, "setting computation arg 8", __LINE__);
   err = clSetKernelArg(ocl->computation, 9, sizeof(cl_float), &params->accel);
   checkError(err, "setting computation arg 9", __LINE__);
-
-  err = clSetKernelArg(ocl->accelerate_flow_flipped, 0, sizeof(cl_mem), &ocl->tmp_cells);
-  checkError(err, "setting accelerate_flow_flipped arg 0", __LINE__);
-  err = clSetKernelArg(ocl->accelerate_flow_flipped, 1, sizeof(cl_mem), &ocl->obstacles);
-  checkError(err, "setting accelerate_flow_flipped arg 1", __LINE__);
-  err = clSetKernelArg(ocl->accelerate_flow_flipped, 2, sizeof(cl_int), &params->nx);
-  checkError(err, "setting accelerate_flow_flipped arg 2", __LINE__);
-  err = clSetKernelArg(ocl->accelerate_flow_flipped, 3, sizeof(cl_int), &params->ny);
-  checkError(err, "setting accelerate_flow_flipped arg 3", __LINE__);
-  err = clSetKernelArg(ocl->accelerate_flow_flipped, 4, sizeof(cl_float), &params->density);
-  checkError(err, "setting accelerate_flow_flipped arg 4", __LINE__);
-  err = clSetKernelArg(ocl->accelerate_flow_flipped, 5, sizeof(cl_float), &params->accel);
-  checkError(err, "setting accelerate_flow_flipped arg 5", __LINE__);
 
   err = clSetKernelArg(ocl->computation_flipped, 0, sizeof(cl_mem), &ocl->tmp_cells);
   checkError(err, "setting computation_flipped arg 0", __LINE__);
