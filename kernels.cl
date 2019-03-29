@@ -1,7 +1,5 @@
 #pragma OPENCL EXTENSION cl_khr_fp64 : enable
 
-#define NSPEEDS 9
-
 kernel void computation(global float* cells,
                         global float* tmp_cells,
                         global const int*   obstacles,

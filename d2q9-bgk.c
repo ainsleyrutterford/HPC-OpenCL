@@ -17,7 +17,13 @@
 #define FINALSTATEFILE  "final_state.dat"
 #define AVVELSFILE      "av_vels.dat"
 #define OCLFILE         "kernels.cl"
-#define LOCAL_SIZE      16
+
+// #ifndef LOCAL_SIZE_X
+  #define LOCAL_SIZE_X 16
+// #endif
+// #ifndef LOCAL_SIZE_Y
+  #define LOCAL_SIZE_Y 16
+// #endif
 
 // struct to hold the parameter values
 typedef struct {
@@ -50,7 +56,6 @@ typedef struct {
   cl_mem velocities;
   cl_mem average_vels;
 
-  size_t local_size;
   int    work_groups;
 } t_ocl;
 
@@ -199,7 +204,7 @@ int timestep(const t_param params, t_ocl ocl, bool regular) {
 
   // Enqueue kernel
   size_t computation_global[2] = {params.nx, params.ny};
-  size_t local[2] = {ocl.local_size, ocl.local_size};
+  size_t local[2] = {LOCAL_SIZE_X, LOCAL_SIZE_Y};
   err = clEnqueueNDRangeKernel(ocl.queue,
                                (regular) ? ocl.computation : ocl.computation_flipped,
                                2, NULL, computation_global, local, 0, NULL, NULL);
@@ -447,8 +452,7 @@ int initialise(const char* paramfile, const char* obstaclefile,
                                   sizeof(cl_int) * params->nx * params->ny, NULL, &err);
   checkError(err, "creating obstacles buffer", __LINE__);
 
-  ocl->local_size = LOCAL_SIZE;
-  ocl->work_groups = (params->nx * params->ny) / (ocl->local_size * ocl->local_size);
+  ocl->work_groups = (params->nx * params->ny) / (LOCAL_SIZE_X * LOCAL_SIZE_Y);
 
   ocl->velocities = clCreateBuffer(ocl->context, CL_MEM_READ_WRITE,
                                    sizeof(float) * ocl->work_groups * params->maxIters, NULL, &err);
@@ -496,7 +500,7 @@ int initialise(const char* paramfile, const char* obstaclefile,
   checkError(err, "setting computation arg 5", __LINE__);
   err = clSetKernelArg(ocl->computation, 6, sizeof(cl_mem), &ocl->velocities);
   checkError(err, "setting computation arg 6", __LINE__);
-  err = clSetKernelArg(ocl->computation, 7, sizeof(float) * ocl->local_size * ocl->local_size, NULL);
+  err = clSetKernelArg(ocl->computation, 7, sizeof(float) * LOCAL_SIZE_X * LOCAL_SIZE_Y, NULL);
   checkError(err, "setting computation arg 7", __LINE__);
   err = clSetKernelArg(ocl->computation, 8, sizeof(cl_float), &params->density);
   checkError(err, "setting computation arg 8", __LINE__);
@@ -517,7 +521,7 @@ int initialise(const char* paramfile, const char* obstaclefile,
   checkError(err, "setting computation_flipped arg 5", __LINE__);
   err = clSetKernelArg(ocl->computation_flipped, 6, sizeof(cl_mem), &ocl->velocities);
   checkError(err, "setting computation_flipped arg 6", __LINE__);
-  err = clSetKernelArg(ocl->computation_flipped, 7, sizeof(float) * ocl->local_size * ocl->local_size, NULL);
+  err = clSetKernelArg(ocl->computation_flipped, 7, sizeof(float) * LOCAL_SIZE_X * LOCAL_SIZE_Y, NULL);
   checkError(err, "setting computation_flipped arg 7", __LINE__);
   err = clSetKernelArg(ocl->computation_flipped, 8, sizeof(cl_float), &params->density);
   checkError(err, "setting computation_flipped arg 8", __LINE__);

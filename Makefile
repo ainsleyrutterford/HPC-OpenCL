@@ -3,7 +3,7 @@
 EXE=d2q9-bgk
 
 CC=gcc
-CFLAGS= -std=c99 -Wall -O3
+CFLAGS= -std=c99 -Wall -O3 -D LOCAL_SIZE_X=$(LOCAL_SIZE_X) -D LOCAL_SIZE_Y=$(LOCAL_SIZE_Y)
 LIBS = -lm
 
 PLATFORM = $(shell uname -s)
