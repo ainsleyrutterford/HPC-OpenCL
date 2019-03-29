@@ -9,7 +9,7 @@
 #PBS -m a
 
 #! application name
-application="mpi_d2q9-bgk.c"
+application="mpi_d2q9-bgk"
 
 #! Run options for the application
 options="input_128x128.params obstacles_128x128.dat"
