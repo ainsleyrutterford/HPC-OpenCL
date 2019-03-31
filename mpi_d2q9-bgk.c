@@ -239,16 +239,14 @@ int main(int argc, char* argv[]) {
 
   double local_tic = MPI_Wtime();
 
-  if (rank == MASTER) {
-    for (int tt = 0; tt < params.maxIters; tt+=2) {
-      local_av_vels[tt]   = timestep(params, &local_cells, &local_tmp_cells, local_obstacles, rank);
-      local_av_vels[tt+1] = timestep(params, &local_tmp_cells, &local_cells, local_obstacles, rank);
-      #ifdef DEBUG
-        printf("==timestep: %d==\n", tt);
-        printf("av velocity: %.12E\n", av_vels[tt]);
-        printf("tot density: %.12E\n", total_density(params, cells));
-      #endif
-    }
+  for (int tt = 0; tt < params.maxIters; tt+=2) {
+    local_av_vels[tt]   = timestep(params, &local_cells, &local_tmp_cells, local_obstacles, rank);
+    local_av_vels[tt+1] = timestep(params, &local_tmp_cells, &local_cells, local_obstacles, rank);
+    #ifdef DEBUG
+      printf("==timestep: %d==\n", tt);
+      printf("av velocity: %.12E\n", av_vels[tt]);
+      printf("tot density: %.12E\n", total_density(params, cells));
+    #endif
   }
 
   if (rank == MASTER) {
