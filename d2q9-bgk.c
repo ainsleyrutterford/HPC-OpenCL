@@ -19,10 +19,10 @@
 #define OCLFILE         "kernels.cl"
 
 // #ifndef LOCAL_SIZE_X
-  #define LOCAL_SIZE_X 16
+  #define LOCAL_SIZE_X 32
 // #endif
 // #ifndef LOCAL_SIZE_Y
-  #define LOCAL_SIZE_Y 16
+  #define LOCAL_SIZE_Y 4
 // #endif
 
 // struct to hold the parameter values
