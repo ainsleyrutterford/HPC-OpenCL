@@ -92,7 +92,7 @@ int main(int argc, char* argv[]) {
   gettimeofday(&timstr, NULL);
   tic = timstr.tv_sec + (timstr.tv_usec / 1000000.0);
 
-  #pragma omp target enter data map(to: cells[0:params.nx * params.ny * NSPEEDS], tmp_cells[0:params.nx * params.ny * NSPEEDS], obstacles[0:params.nx * params.ny])
+  #pragma omp target enter data map(to: cells[0:params.nx * params.ny * NSPEEDS], tmp_cells[0:params.nx * params.ny * NSPEEDS], obstacles[0:params.nx * params.ny], params)
 
   for (int tt = 0; tt < params.maxIters; tt+=2) {
     av_vels[tt]   = timestep(params, cells, tmp_cells, obstacles);
@@ -137,6 +137,7 @@ float timestep(const t_param params, float* restrict cells, float* restrict tmp_
   /* modify the 2nd row of the grid */
   const int jj = params.ny - 2;
 
+  #pragma omp target teams distribute parallel for
   for (int ii = 0; ii < params.nx; ii++) {
     /* if the cell is not occupied and
     ** we don't send a negative density */
@@ -164,7 +165,7 @@ float timestep(const t_param params, float* restrict cells, float* restrict tmp_
   int   tot_cells = 0; /* no. of cells used in calculation */
   float tot_u = 0.f;   /* accumulated magnitudes of velocity for each cell */
 
-  #pragma omp target teams distribute parallel for simd collapse(2) \
+  #pragma omp target teams distribute parallel for collapse(2) \
    map(tofrom:tot_cells, tot_u) reduction(+:tot_cells, tot_u)
   for (int jj = 0; jj < params.ny; jj++) {
     for (int ii = 0; ii < params.nx; ii++) {
