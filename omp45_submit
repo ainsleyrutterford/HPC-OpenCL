@@ -1,0 +1,22 @@
+#!/bin/bash
+
+#PBS -N d2q9-bgk
+#PBS -j oe
+#PBS -o d2q9-bgk.out
+#PBS -q teaching
+#PBS -l nodes=1:ppn=16:gpus=1,walltime=00:10:00
+
+# Change the working directory (default is home directory)
+cd "$PBS_O_WORKDIR"
+
+module load /newhome/pa13269/modules/modulefiles/llvm
+
+echo "Running on host: $(hostname)"
+echo "Time is: $(date)"
+echo "Directory is: $(pwd)"
+echo "PBS job ID is: $PBS_JOBID"
+echo "This jobs runs on the following machines: $(cat "$PBS_NODEFILE" | uniq)"
+echo "Running OpenMP4.5 Target implementation."
+
+# Run the executable
+./openmp45_d2q9-bgk input_128x128.params obstacles_128x128.dat

@@ -71,7 +71,6 @@ float calc_reynolds(const t_param params, float* cells, int* obstacles);
 void die(const char* message, const int line, const char* file);
 void usage(const char* exe);
 
-void zero_image(float* image, int cols, int rows);
 int calc_nrows_from_rank(int rank, int size, int ny);
 
 /*
@@ -92,8 +91,6 @@ int main(int argc, char* argv[]) {
   MPI_Comm_size(MPI_COMM_WORLD, &size);
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-  if (rank == MASTER) printf("Starting...\n");
-
   // parse the command line
   if (argc != 3) {
     usage(argv[0]);
@@ -105,8 +102,6 @@ int main(int argc, char* argv[]) {
   if (rank == MASTER) {
     initialise(paramfile, obstaclefile, &params, &cells, &tmp_cells, &obstacles, &av_vels);
   }
-
-  if (rank == MASTER) printf("Initialised...\n");
 
   left  = (rank - 1 + size) % size;
   right = (rank + 1)        % size;
@@ -134,15 +129,11 @@ int main(int argc, char* argv[]) {
   local_nrows = calc_nrows_from_rank(rank, size, params.ny);
   local_ncols = params.nx;
 
-  printf("rank %d local_nrows %d local_ncols %d\n", rank, local_nrows, local_ncols);
-
   int* local_obstacles = _mm_malloc(sizeof(int) * (local_ncols * local_nrows), 64);
   float* local_av_vels = _mm_malloc(sizeof(float) * params.maxIters, 64);
 
   float* local_cells = _mm_malloc(sizeof(float) * NSPEEDS * (local_nrows + 2) * local_ncols, 64);
   float* local_tmp_cells = _mm_malloc(sizeof(float) * NSPEEDS * (local_nrows + 2) * local_ncols, 64);
-
-  printf("Scattering...\n");
 
   for (int x = 0; x < params.nx; x++) {
     if (rank == MASTER) {
@@ -156,7 +147,6 @@ int main(int argc, char* argv[]) {
         local_cells[6 * (local_nrows+2) * local_ncols + (x + y*params.nx)] = cells[6 * params.ny * params.nx + (x + (y-1)*params.nx)];
         local_cells[7 * (local_nrows+2) * local_ncols + (x + y*params.nx)] = cells[7 * params.ny * params.nx + (x + (y-1)*params.nx)];
         local_cells[8 * (local_nrows+2) * local_ncols + (x + y*params.nx)] = cells[8 * params.ny * params.nx + (x + (y-1)*params.nx)];
-        // printf("master local cell is %f\n", local_cells[8 * (local_nrows+2) * local_ncols + (x + y*params.nx)]);
         local_obstacles[x + (y-1)*params.nx] = obstacles[x + (y-1)*params.nx];
       }
       for (int k = 1; k < size; k++) {
@@ -193,15 +183,10 @@ int main(int argc, char* argv[]) {
         local_cells[6 * (local_nrows+2) * local_ncols + (x + y*params.nx)] = cells_recvbuf[y-1 + 6*local_nrows];
         local_cells[7 * (local_nrows+2) * local_ncols + (x + y*params.nx)] = cells_recvbuf[y-1 + 7*local_nrows];
         local_cells[8 * (local_nrows+2) * local_ncols + (x + y*params.nx)] = cells_recvbuf[y-1 + 8*local_nrows];
-        // printf("master local cell is %f\n", local_cells[8 * (local_nrows+2) * local_ncols + (x + y*params.nx)]);
         local_obstacles[x + (y-1)*params.nx] = obstacles_recvbuf[y-1];
       }
     }
   }
-
-  if (rank == MASTER) printf("Finished scattering...\n");
-
-  if (rank == MASTER) printf("Starting timesteps...\n");
 
   double local_tic = MPI_Wtime();
 
@@ -215,24 +200,6 @@ int main(int argc, char* argv[]) {
     #endif
   }
 
-  // if (rank == MASTER) {
-  //   for (int i = 0; i < params.maxIters; i++) {
-  //     av_vels[i] += local_av_vels[i];
-  //   }
-  //   for (int k = 1; k < size; k++) {
-  //     float* av_vels_recvbuf = malloc(sizeof(float) * params.maxIters);
-  //     MPI_Recv(av_vels_recvbuf, params.maxIters, MPI_FLOAT, k, tag, MPI_COMM_WORLD, &status);
-  //     for (int i = 0; i < params.maxIters; i++) {
-  //       av_vels[i] += av_vels_recvbuf[i];
-  //     }
-  //   }
-  //   for (int i = 0; i < params.maxIters; i++) {
-  //     av_vels[i] /= total_cells;
-  //   }
-  // } else {
-  //   MPI_Send(local_av_vels, params.maxIters, MPI_FLOAT, MASTER, tag, MPI_COMM_WORLD);
-  // }
-
   MPI_Reduce(local_av_vels, av_vels, params.maxIters, MPI_FLOAT, MPI_SUM, MASTER, MPI_COMM_WORLD);
   if (rank == MASTER) {
     for (int i = 0; i < params.maxIters; i++) {
@@ -242,35 +209,22 @@ int main(int argc, char* argv[]) {
 
   double local_toc = MPI_Wtime();
 
-  if (rank == MASTER) printf("Timesteps finished...\n");
-
   double global_tic, global_toc;
   MPI_Reduce(&local_tic, &global_tic, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
   MPI_Reduce(&local_toc, &global_toc, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-
-  if (rank == MASTER) printf("Receiving...\n");
 
   for (int x = 0; x < params.nx; x++) {
     if (rank == MASTER) {
       for (int y = 1; y < (local_nrows + 2) - 1; y++) {
         cells[0 * params.ny * params.nx + (x + (y-1)*params.nx)] = local_cells[0 * (local_nrows+2) * local_ncols + (x + y*params.nx)];
-        // printf("master local cell y %d is %f\n", y, cells[0 * params.ny * params.nx + (x + (y-1)*params.nx)]);
         cells[1 * params.ny * params.nx + (x + (y-1)*params.nx)] = local_cells[1 * (local_nrows+2) * local_ncols + (x + y*params.nx)];
-        // printf("master local cell y %d is %f\n", y, cells[1 * params.ny * params.nx + (x + (y-1)*params.nx)]);
         cells[2 * params.ny * params.nx + (x + (y-1)*params.nx)] = local_cells[2 * (local_nrows+2) * local_ncols + (x + y*params.nx)];
-        // printf("master local cell y %d is %f\n", y, cells[2 * params.ny * params.nx + (x + (y-1)*params.nx)]);
         cells[3 * params.ny * params.nx + (x + (y-1)*params.nx)] = local_cells[3 * (local_nrows+2) * local_ncols + (x + y*params.nx)];
-        // printf("master local cell y %d is %f\n", y, cells[3 * params.ny * params.nx + (x + (y-1)*params.nx)]);
         cells[4 * params.ny * params.nx + (x + (y-1)*params.nx)] = local_cells[4 * (local_nrows+2) * local_ncols + (x + y*params.nx)];
-        // printf("master local cell y %d is %f\n", y, cells[4 * params.ny * params.nx + (x + (y-1)*params.nx)]);
         cells[5 * params.ny * params.nx + (x + (y-1)*params.nx)] = local_cells[5 * (local_nrows+2) * local_ncols + (x + y*params.nx)];
-        // printf("master local cell y %d is %f\n", y, cells[5 * params.ny * params.nx + (x + (y-1)*params.nx)]);
         cells[6 * params.ny * params.nx + (x + (y-1)*params.nx)] = local_cells[6 * (local_nrows+2) * local_ncols + (x + y*params.nx)];
-        // printf("master local cell y %d is %f\n", y, cells[6 * params.ny * params.nx + (x + (y-1)*params.nx)]);
         cells[7 * params.ny * params.nx + (x + (y-1)*params.nx)] = local_cells[7 * (local_nrows+2) * local_ncols + (x + y*params.nx)];
-        // printf("master local cell y %d is %f\n", y, cells[7 * params.ny * params.nx + (x + (y-1)*params.nx)]);
         cells[8 * params.ny * params.nx + (x + (y-1)*params.nx)] = local_cells[8 * (local_nrows+2) * local_ncols + (x + y*params.nx)];
-        // printf("master local cell y %d is %f\n", y, cells[8 * params.ny * params.nx + (x + (y-1)*params.nx)]);
       }
       for (int k = 1; k < size; k++) {
         remote_nrows = calc_nrows_from_rank(k, size, params.ny);
@@ -278,52 +232,32 @@ int main(int argc, char* argv[]) {
         MPI_Recv(cells_recvbuf, remote_nrows * NSPEEDS, MPI_FLOAT, k, tag, MPI_COMM_WORLD, &status);
         for (int y = 0; y < remote_nrows; y++) {
           cells[0 * params.ny * params.nx + (x + (local_nrows * k + y) * params.nx)] = cells_recvbuf[y + 0*remote_nrows];
-          // printf("master recv cell y %d is %f\n", y, cells[0 * params.ny * params.nx + (x + (local_nrows * k + y) * params.nx)]);
           cells[1 * params.ny * params.nx + (x + (local_nrows * k + y) * params.nx)] = cells_recvbuf[y + 1*remote_nrows];
-          // printf("master recv cell y %d is %f\n", y, cells[1 * params.ny * params.nx + (x + (local_nrows * k + y) * params.nx)]);
           cells[2 * params.ny * params.nx + (x + (local_nrows * k + y) * params.nx)] = cells_recvbuf[y + 2*remote_nrows];
-          // printf("master local cell y %d is %f\n", y, cells[2 * params.ny * params.nx + (x + (local_nrows * k + y) * params.nx)]);
           cells[3 * params.ny * params.nx + (x + (local_nrows * k + y) * params.nx)] = cells_recvbuf[y + 3*remote_nrows];
-          // printf("master local cell y %d is %f\n", y, cells[3 * params.ny * params.nx + (x + (local_nrows * k + y) * params.nx)]);
           cells[4 * params.ny * params.nx + (x + (local_nrows * k + y) * params.nx)] = cells_recvbuf[y + 4*remote_nrows];
-          // printf("master local cell y %d is %f\n", y, cells[4 * params.ny * params.nx + (x + (local_nrows * k + y) * params.nx)]);
           cells[5 * params.ny * params.nx + (x + (local_nrows * k + y) * params.nx)] = cells_recvbuf[y + 5*remote_nrows];
-          // printf("master local cell y %d is %f\n", y, cells[5 * params.ny * params.nx + (x + (local_nrows * k + y) * params.nx)]);
           cells[6 * params.ny * params.nx + (x + (local_nrows * k + y) * params.nx)] = cells_recvbuf[y + 6*remote_nrows];
-          // printf("master local cell y %d is %f\n", y, cells[6 * params.ny * params.nx + (x + (local_nrows * k + y) * params.nx)]);
           cells[7 * params.ny * params.nx + (x + (local_nrows * k + y) * params.nx)] = cells_recvbuf[y + 7*remote_nrows];
-          // printf("master local cell y %d is %f\n", y, cells[7 * params.ny * params.nx + (x + (local_nrows * k + y) * params.nx)]);
           cells[8 * params.ny * params.nx + (x + (local_nrows * k + y) * params.nx)] = cells_recvbuf[y + 8*remote_nrows];
-          // printf("master local cell y %d is %f\n", y, cells[8 * params.ny * params.nx + (x + (local_nrows * k + y) * params.nx)]);
         }
       }
     } else {
       float* cells_sendbuf = (float*) malloc(sizeof(float) * local_nrows * NSPEEDS);
       for (int y = 1; y < (local_nrows + 2) - 1; y++) {
         cells_sendbuf[y-1 + 0*local_nrows] = local_cells[0 * (local_nrows+2) * local_ncols + (x + y*params.nx)];
-        // printf("master send cell is %f\n", local_cells[0 * (local_nrows+2) * local_ncols + (x + y*params.nx)]);
         cells_sendbuf[y-1 + 1*local_nrows] = local_cells[1 * (local_nrows+2) * local_ncols + (x + y*params.nx)];
-        // printf("master send cell is %f\n", local_cells[1 * (local_nrows+2) * local_ncols + (x + y*params.nx)]);
         cells_sendbuf[y-1 + 2*local_nrows] = local_cells[2 * (local_nrows+2) * local_ncols + (x + y*params.nx)];
-        // printf("master local cell is %f\n", local_cells[0 * (local_nrows+2) * local_ncols + (x + y*params.nx)]);
         cells_sendbuf[y-1 + 3*local_nrows] = local_cells[3 * (local_nrows+2) * local_ncols + (x + y*params.nx)];
-        // printf("master local cell is %f\n", local_cells[0 * (local_nrows+2) * local_ncols + (x + y*params.nx)]);
         cells_sendbuf[y-1 + 4*local_nrows] = local_cells[4 * (local_nrows+2) * local_ncols + (x + y*params.nx)];
-        // printf("master local cell is %f\n", local_cells[0 * (local_nrows+2) * local_ncols + (x + y*params.nx)]);
         cells_sendbuf[y-1 + 5*local_nrows] = local_cells[5 * (local_nrows+2) * local_ncols + (x + y*params.nx)];
-        // printf("master local cell is %f\n", local_cells[0 * (local_nrows+2) * local_ncols + (x + y*params.nx)]);
         cells_sendbuf[y-1 + 6*local_nrows] = local_cells[6 * (local_nrows+2) * local_ncols + (x + y*params.nx)];
-        // printf("master local cell is %f\n", local_cells[0 * (local_nrows+2) * local_ncols + (x + y*params.nx)]);
         cells_sendbuf[y-1 + 7*local_nrows] = local_cells[7 * (local_nrows+2) * local_ncols + (x + y*params.nx)];
-        // printf("master local cell is %f\n", local_cells[0 * (local_nrows+2) * local_ncols + (x + y*params.nx)]);
         cells_sendbuf[y-1 + 8*local_nrows] = local_cells[8 * (local_nrows+2) * local_ncols + (x + y*params.nx)];
-        // printf("master local cell is %f\n", local_cells[0 * (local_nrows+2) * local_ncols + (x + y*params.nx)]);
       }
       MPI_Ssend(cells_sendbuf, local_nrows * NSPEEDS, MPI_FLOAT, MASTER, tag, MPI_COMM_WORLD);
     }
   }
-
-  if (rank == MASTER) printf("Received...\n");
 
   _mm_free(local_obstacles);
   _mm_free(local_av_vels);
@@ -813,22 +747,6 @@ int write_values(const t_param params, float* cells, int* obstacles, float* av_v
   fclose(fp);
 
   return EXIT_SUCCESS;
-}
-
-void zero_image(float* image, int cols, int rows) {
-    for (int y = 0; y < rows; y++) {
-        for (int x = 0; x < cols; x++) {
-            // image->speed0[x + y*cols] = 0;
-            // image->speed1[x + y*cols] = 0;
-            // image->speed2[x + y*cols] = 0;
-            // image->speed3[x + y*cols] = 0;
-            // image->speed4[x + y*cols] = 0;
-            // image->speed5[x + y*cols] = 0;
-            // image->speed6[x + y*cols] = 0;
-            // image->speed7[x + y*cols] = 0;
-            // image->speed8[x + y*cols] = 0;
-        }
-    }
 }
 
 int calc_nrows_from_rank(int rank, int size, int ny) {

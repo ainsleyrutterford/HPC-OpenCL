@@ -8,12 +8,6 @@
 #! Mail to user if job aborts
 #PBS -m a
 
-#! application name
-application="mpi_d2q9-bgk"
-
-#! Run options for the application
-options="input_128x128.params obstacles_128x128.dat"
-
 # $MPIEXEC $FLAGS_MPI_BATCH --map-by ppr:1:socket --bind-to core a.out
 
 ###############################################################
@@ -30,6 +24,7 @@ echo Directory is `pwd`
 echo PBS job ID is $PBS_JOBID
 echo This jobs runs on the following machines:
 echo `cat $PBS_NODEFILE | uniq`
+echo Running MPI implementation.
 
 #! Create a machine file for MPI
 cat $PBS_NODEFILE > machine.file.$PBS_JOBID
@@ -37,5 +32,4 @@ cat $PBS_NODEFILE > machine.file.$PBS_JOBID
 numnodes=`wc $PBS_NODEFILE | awk '{ print $1 }'`
 
 #! Run the parallel MPI executable (nodes*ppn)
-# mpirun -np $numnodes -machinefile machine.file.$PBS_JOBID $application $options
-mpirun -np 16 -bind-to-core -machinefile machine.file.$PBS_JOBID $application $options
+mpirun -np 16 mpi_d2q9-bgk input_128x128.params obstacles_128x128.dat

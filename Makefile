@@ -30,3 +30,11 @@ check:
 
 clean:
 	rm -f $(EXE)
+	rm -f mpi_d2q9-bgk
+	rm -f openmp45_d2q9-bgk
+
+mpi:
+	mpiicc -std=c99 -Wall mpi_d2q9-bgk.c -o mpi_d2q9-bgk -Ofast -xHOST -O3 -lm
+
+omp45:
+	clang -std=c99 -Wall openmp45_d2q9-bgk.c -o openmp45_d2q9-bgk -fopenmp -lm -fopenmp-targets=nvptx64-nvidia-cuda -Xopenmp-target -march=sm_35 -O3
