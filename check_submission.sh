@@ -7,7 +7,7 @@
 # This script will unload all modules and source 'env.sh' (if present). It will
 # then run `make` and check that there is an executable with the correct name.
 
-set -eu
+set -e
 
 EXE=d2q9-bgk
 ENV=env.sh
@@ -50,7 +50,7 @@ else
     make -s clean
     cat <<-EOM
 
-	Submission check passed. 
+	Submission check passed.
 
 	Please ensure that you submit all source files in the submission directory:
 	    - Makefile
@@ -63,4 +63,3 @@ else
 	Note: Your code has NOT been run and this does NOT mean that the results validate. You should check correctness separately.
 	EOM
 fi
-

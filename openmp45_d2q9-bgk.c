@@ -83,8 +83,6 @@ int main(int argc, char* argv[]) {
     obstaclefile = argv[2];
   }
 
-  printf("initial device: %d\n", omp_is_initial_device());
-
   /* initialise our data structures and load values from file */
   initialise(paramfile, obstaclefile, &params, &cells, &tmp_cells, &obstacles, &av_vels);
 
