@@ -18,12 +18,8 @@
 #define AVVELSFILE      "av_vels.dat"
 #define OCLFILE         "kernels.cl"
 
-// #ifndef LOCAL_SIZE_X
-  #define LOCAL_SIZE_X 32
-// #endif
-// #ifndef LOCAL_SIZE_Y
-  #define LOCAL_SIZE_Y 4
-// #endif
+#define LOCAL_SIZE_X 32
+#define LOCAL_SIZE_Y 4
 
 // struct to hold the parameter values
 typedef struct {
