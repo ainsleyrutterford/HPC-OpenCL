@@ -1,4 +1,4 @@
-# OpenCL, OpenMP, and MPI Lattice Boltzmann implementations 
+# OpenCL, OpenMP, and MPI parallelisation
 
 As part of the Advanced High Performance Computing unit at the University of Bristol, I parallelised a Lattice Boltzmann code using the OpenCL, OpenMP, and MPI libraries. All three implementations are written in C.
 
