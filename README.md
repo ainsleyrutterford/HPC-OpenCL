@@ -4,6 +4,10 @@ As part of the Advanced High Performance Computing unit at the University of Bri
 
 ## About
 
+The OpenCL, OpenMP, and MPI implementations are provided in the `opencl_d2q9-bgk.c`, `openmp_d2q9-bgk.c`, and `mpi_d2q9-bgk.c` files respectively. The kernels for the OpenCL implementation are provided in `kernels.cl`.
+
+The job submission scripts for each implementation are provided in the `jobs/` directory.
+
 ## Usage
 
 ### Prerequisits

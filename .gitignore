@@ -7,3 +7,4 @@ final_state.dat
 Autotuning/
 tuner.conf
 roofline.ipynb
+check/
