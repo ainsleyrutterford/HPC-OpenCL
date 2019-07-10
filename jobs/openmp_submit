@@ -19,4 +19,4 @@ echo "This jobs runs on the following machines: $(cat "$PBS_NODEFILE" | uniq)"
 echo "Running OpenMP4.5 Target implementation."
 
 # Run the executable
-./openmp45_d2q9-bgk input_128x128.params obstacles_128x128.dat
+../openmp45_d2q9-bgk ../input/input_128x128.params ../input/obstacles_128x128.dat
