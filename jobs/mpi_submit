@@ -22,4 +22,4 @@ cat $PBS_NODEFILE > machine.file.$PBS_JOBID
 numnodes=`wc $PBS_NODEFILE | awk '{ print $1 }'`
 
 #! Run the parallel MPI executable (nodes*ppn)
-mpirun -np 16 ../mpi_d2q9-bgk ../input/input_128x128.params ../input/obstacles_128x128.dat
+mpirun -np 16 ./mpi_d2q9-bgk input/input_128x128.params input/obstacles_128x128.dat

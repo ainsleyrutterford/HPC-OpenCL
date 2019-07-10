@@ -25,5 +25,5 @@ echo "GPU selected: $OCL_DEVICE"
 echo
 
 # Run the executable
-../d2q9-bgk ../input/input_128x128.params ../input/obstacles_128x128.dat
+./opencl_d2q9-bgk input/input_128x128.params input/obstacles_128x128.dat
 
