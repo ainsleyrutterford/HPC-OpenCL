@@ -1,6 +1,6 @@
 # OpenCL, OpenMP, and MPI parallelisation
 
-As part of the Advanced High Performance Computing unit at the University of Bristol, I parallelised a Lattice Boltzmann code using the OpenCL, OpenMP, and MPI libraries. All three implementations are written in C. I achieved the highest grade in the class and was awarded the Crazy prize. A report explaining the optimisations explored is available [here](https://github.com/ainsleyrutterford/HPC-OpenCL/blob/master/report.pdf). 
+As part of the Advanced High Performance Computing unit at the University of Bristol, I parallelised a Lattice Boltzmann code using the OpenCL, OpenMP, and MPI libraries. All three implementations are written in C. I achieved the highest grade in the class and was awarded the Cray prize. A report explaining the optimisations explored is available [here](https://github.com/ainsleyrutterford/HPC-OpenCL/blob/master/report.pdf). 
 
 ## About
 
